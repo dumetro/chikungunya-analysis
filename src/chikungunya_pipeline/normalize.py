@@ -19,6 +19,7 @@ first of {name, <entity>_name, label, title, description} that exists.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -26,6 +27,7 @@ import pandas as pd
 from rapidfuzz import fuzz, process
 from sqlalchemy import Engine, inspect, text
 
+from .config import get_settings
 from .db import get_engine
 
 # Candidate name columns, in priority order.
@@ -203,14 +205,101 @@ def _normalize_multi(
     return value
 
 
+@dataclass
+class LookupSets:
+    """analysis_lookups: canonical values per category."""
+
+    # category -> {lower(value) -> canonical value}
+    by_key: dict[str, dict[str, str]] = field(default_factory=dict)
+    # category -> [canonical values]
+    values: dict[str, list[str]] = field(default_factory=dict)
+
+    def allowed(self, category: str) -> list[str]:
+        return self.values.get(category, [])
+
+
+def _ingest_lookup_rows(rows) -> LookupSets:
+    ls = LookupSets()
+    for category, value in rows:
+        if category is None or value is None:
+            continue
+        cat = str(category).strip()
+        val = str(value).strip()
+        ls.by_key.setdefault(cat, {})[_key(val)] = val
+        ls.values.setdefault(cat, []).append(val)
+    return ls
+
+
+def load_lookup_sets(engine: Engine | None = None) -> LookupSets:
+    """Load analysis_lookups from the DB; fall back to the seed CSV if offline."""
+    try:
+        engine = engine or get_engine()
+        with engine.connect() as conn:
+            rows = list(
+                conn.execute(
+                    text(
+                        "SELECT lk_category, lk_value FROM public.analysis_lookups "
+                        "WHERE is_active ORDER BY lk_category, lk_sequence"
+                    )
+                )
+            )
+        return _ingest_lookup_rows(rows)
+    except Exception:
+        csv_path = get_settings().resolve(get_settings().lookups_csv)
+        if csv_path.exists():
+            df = pd.read_csv(csv_path)
+            active = df[df.get("is_active", True).astype(str).str.lower() != "false"] \
+                if "is_active" in df.columns else df
+            return _ingest_lookup_rows(zip(active["lk_category"], active["lk_value"]))
+        return LookupSets()
+
+
+def _normalize_lookup(
+    value: Optional[str],
+    category: str,
+    sets: LookupSets,
+    overrides: dict[str, str],
+    patterns: list[tuple[re.Pattern, str]],
+    report: UnmappedReport,
+    column: str,
+) -> Optional[str]:
+    if value is None:
+        return None
+    key = _key(value)
+    canon = sets.by_key.get(category, {})
+
+    # 1) exact (case-insensitive) match to a canonical value.
+    if key in canon:
+        return canon[key]
+    # 2) user synonym override -> canonical (validated against the set).
+    if key in overrides:
+        mapped = overrides[key]
+        return canon.get(_key(mapped), mapped)
+    # 3) regex pattern -> canonical.
+    for rx, target in patterns:
+        if rx.search(value):
+            return canon.get(_key(target), target)
+    # 4) unmapped -> suggest + keep raw (validation will flag it).
+    suggestion, score = _fuzzy_suggest(value, sets.allowed(category))
+    report.add(column, value, suggestion, score)
+    return value
+
+
 def normalize_dataframe(
     df: pd.DataFrame,
     coded_columns: dict[str, str],
     multivalue_columns: dict[str, str],
+    lookup_columns: dict[str, str] | None = None,
+    value_overrides: dict[str, dict[str, str]] | None = None,
+    value_patterns: dict[str, dict[str, str]] | None = None,
     lookups: LookupTables | None = None,
+    lookup_sets: LookupSets | None = None,
 ) -> tuple[pd.DataFrame, UnmappedReport]:
-    """Normalise coded/multivalue columns. Returns (df, unmapped report)."""
-    lt = lookups or build_lookups()
+    """Normalise coded/multivalue/lookup columns. Returns (df, unmapped report)."""
+    # Only touch the reference (raw_map) tables when there is coded/multivalue
+    # work to do — lookup-only normalisation must not require the DB.
+    need_refs = bool(coded_columns) or bool(multivalue_columns)
+    lt = lookups or (build_lookups() if need_refs else LookupTables())
     report = UnmappedReport()
     out = df.copy()
 
@@ -225,5 +314,20 @@ def normalize_dataframe(
         if spec is None or col not in out.columns:
             continue
         out[col] = out[col].map(lambda v: _normalize_multi(v, spec, lt, report, col))
+
+    # analysis_lookups-coded columns.
+    if lookup_columns:
+        ls = lookup_sets or load_lookup_sets()
+        overrides = value_overrides or {}
+        patterns_cfg = value_patterns or {}
+        for col, category in lookup_columns.items():
+            if col not in out.columns:
+                continue
+            col_overrides = overrides.get(col, {})
+            compiled = [(re.compile(rx, re.IGNORECASE), tgt)
+                        for rx, tgt in patterns_cfg.get(col, {}).items()]
+            out[col] = out[col].map(
+                lambda v: _normalize_lookup(v, category, ls, col_overrides, compiled, report, col)
+            )
 
     return out, report

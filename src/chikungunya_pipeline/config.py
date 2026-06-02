@@ -30,12 +30,21 @@ class Settings(BaseSettings):
         alias="DATABASE_URL",
     )
 
+    # Default source workbook used whenever a file is not given explicitly.
+    source_file: Path = Field(
+        default=Path("data/incoming/Chikungunya_mau_2026.xlsx"), alias="SOURCE_FILE"
+    )
+
     incoming_dir: Path = Field(default=Path("data/incoming"), alias="INCOMING_DIR")
     rejects_dir: Path = Field(default=Path("data/rejects"), alias="REJECTS_DIR")
     archive_dir: Path = Field(default=Path("data/archive"), alias="ARCHIVE_DIR")
 
     column_mapping_path: Path = Field(
         default=Path("config/column_mapping.yaml"), alias="COLUMN_MAPPING_PATH"
+    )
+    # Offline fallback for analysis_lookups when the DB is unreachable (dry-run).
+    lookups_csv: Path = Field(
+        default=Path("data/incoming/analysis_lookups.csv"), alias="LOOKUPS_CSV"
     )
     expectations_path: Path = Field(
         default=Path("config/expectations.yaml"), alias="EXPECTATIONS_PATH"

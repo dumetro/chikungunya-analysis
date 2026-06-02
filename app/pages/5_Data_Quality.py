@@ -14,14 +14,47 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from chikungunya_pipeline.config import get_settings  # noqa: E402
+from chikungunya_pipeline.pipeline import default_source, run_pipeline  # noqa: E402
 from theme import who_style as who  # noqa: E402
+from data_access import load_cases  # noqa: E402
 
 st.set_page_config(page_title="Data Quality", page_icon="✅", layout="wide")
 who.apply_theme()
-who.header("Data Quality", "Latest validation run, rejected rows and unmapped values")
+who.header("Data Quality", "Run ingestion, review the latest validation run and rejected rows")
 
 settings = get_settings()
 rejects_dir = settings.resolve(settings.rejects_dir)
+
+# --- Manual ingestion trigger ---------------------------------------------
+st.subheader("Run data ingestion")
+src = default_source()
+st.caption(f"Source workbook: `{src}`" if src else "No source workbook configured.")
+col_a, col_b, _ = st.columns([1, 1, 2])
+dry = col_a.button("Validate only (dry-run)", use_container_width=True)
+live = col_b.button("Ingest & load to DB", type="primary", use_container_width=True)
+
+if dry or live:
+    with st.status("Running pipeline …", expanded=True) as status:
+        try:
+            res = run_pipeline(dry_run=dry, log=lambda m: st.write(m))
+        except Exception as exc:
+            status.update(label="Pipeline failed", state="error")
+            st.error(str(exc))
+        else:
+            verb = "Dry-run complete" if dry else "Ingestion complete"
+            status.update(label=verb, state="complete")
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Ingested", res.ingested_rows)
+            m2.metric("Passed", res.passed)
+            m3.metric("Failed", res.failed)
+            m4.metric("Inserted" if not dry else "Would load",
+                      res.inserted if not dry else res.passed)
+            if not dry:
+                st.caption(f"Skipped duplicates: {res.skipped_duplicate}"
+                           + (f" · archived → {res.archived_to}" if res.archived_to else ""))
+                load_cases.clear()  # refresh dashboard data on next view
+
+st.divider()
 
 
 def _latest(glob: str) -> Path | None:
@@ -46,8 +79,8 @@ st.subheader("Expectation results")
 exp = pd.DataFrame(summary.get("expectations", []))
 if not exp.empty:
     def _row_style(r):
-        color = "#E9F7E5" if r["success"] else "#FBE4E6"
-        return [f"background-color: {color}"] * len(r)
+        bg = "#E9F7E5" if r["success"] else "#FBE4E6"
+        return [f"background-color: {bg}; color: #1F2937"] * len(r)
     st.dataframe(exp.style.apply(_row_style, axis=1), use_container_width=True, hide_index=True)
 
 st.subheader("Rejected rows")

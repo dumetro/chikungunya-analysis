@@ -11,38 +11,37 @@ header_row: 0
 # Left side: the header as it appears in the spreadsheet (any case / spacing).
 # Right side: the target column in public.chikungunya_analysis.
 columns:
-  "Date of Notification": date_of_notification
-  "Date of Sample Taken": date_of_sample_taken
-  "Epi Week": epi_week
+  "DATE OF NOTIFICATION": date_of_notification
+  "DATE OF SAMPLE TAKEN": date_of_sample_taken
+  "EPI WEEK": epi_week
   "Active/Passive": active_passive
-  "Health Region": health_region
-  "Health Office": health_office
-  "Locality": locality
-  "Age": age
-  "Age Group": age_group
-  "Gender": gender
-  "Sex": gender
-  "Nationality": nationality
-  "Occupation": occupation
-  "Past History of Chikungunya": past_history_of_chikungunya
-  "Pregnancy": pregnancy
-  "Gestation Week": gestation_week
-  "Comorbidities/PMH": comorbidities_pmh
-  "Comorbidities": comorbidities_pmh
-  "Date of Onset of Symptoms": date_of_onset_symptoms
-  "Symptoms": symptoms
-  "Epi Linkage": epi_linkage
-  "Local or Imported": local_or_imported
-  "Health Institution Attended": health_institution_attended
-  "Date Attended": date_attended
-  "Health Institution": health_institution
-  "If Admitted": if_admitted
-  "Date of Admission": date_of_admission
-  "PCR Result": pcr_result
-  "Date of Negative PCR": date_of_negative_pcr
-  "Outcome": outcome
-  "DMU/Hospitalised/TBA/Missing": dmu_hospitalised_tba_missing
-  "Remarks": remarks
+  "HEALTH REGION": health_region
+  "HEALTH OFFICE": health_office
+  "LOCALITY": locality
+  "AGE": age
+  "AGE GROUP": age_group
+  "GENDER": gender
+  "NATIONALITY": nationality
+  "OCCUPATION": occupation
+  "PAST HISTORY OF INFECTION OF CHIKUNGUNYA": past_history_of_chikungunya
+  "PREGNANCY (YES OR NO) IF YES SPECIFY GESTATION WEEK": pregnancy
+  "COMORBIDITIES/PMH": comorbidities_pmh
+  "COMORBIDITIES": comorbidities_pmh
+  "DATE OF ONSET OF SYMPTOMS": date_of_onset_symptoms
+  "DATE OF ONSET SYMPTOMS": date_of_onset_symptoms
+  "SYMPTOMS": symptoms
+  "EPI LINKAGE": epi_linkage
+  "LOCAL OR IMPORTED?": local_or_imported
+  "HEALTH INSTITUTION ATTENDED": health_institution_attended
+  "DATE ATTENDED": date_attended
+  "HEALTH INSTITUTION, If Admitted": health_institution
+  "DATE OF ADMISSION": date_of_admission
+  "PCR": pcr_result
+  "PCR RESULT": pcr_result
+  "DATE OF NEGATIVE PCR": date_of_negative_pcr
+  "OUTCOME": outcome
+  "DMU/HOSPITALISED/TBA/MISSING": dmu_hospitalised_tba_missing
+  "REMARKS": remarks
 
 # Columns that must be routed through dates.to_iso8601().
 date_columns:
@@ -74,11 +73,36 @@ coded_columns:
   occupation: occupation
   nationality: nationality
 
-# Optional per-value overrides applied during sanitisation, by DB column.
-# Useful for obvious one-off fixes before reference-table normalisation.
+# Single-value columns normalised against analysis_lookups (lk_category).
+# The canonical value list per category lives in analysis_lookups; raw values
+# are matched case-insensitively, then via value_overrides, then value_patterns.
+lookup_columns:
+  gender: GENDER
+  age_group: AGE_GROUP
+  active_passive: ACTIVE_PASSIVE
+  local_or_imported: LOCAL_IMPORTED
+  pcr_result: PCR_RESULT
+  outcome: OUTCOME
+
+# Optional per-value overrides (exact, case-insensitive) applied during
+# normalisation, by DB column. Extend these for one-off synonyms.
 value_overrides:
   gender:
     "m": "Male"
     "f": "Female"
     "male": "Male"
     "female": "Female"
+  age_group:
+    "60 and above": "60-150"
+    "60+": "60-150"
+
+# Optional regex (case-insensitive) -> canonical rules applied during
+# normalisation, by DB column. First match wins. Use for messy free-text
+# variants. Add more as new patterns appear in the unmapped-values report.
+value_patterns:
+  pcr_result:
+    "\\bpos": "Positive"        # POS, POSITVE, "POS ON 11.5.2026", "PCR POS ..."
+    "\\bneg": "Negative"
+    "pend|await": "Pending"
+  age_group:
+    "60.*above|>=?\\s*60|60\\s*\\+": "60-150"

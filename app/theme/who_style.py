@@ -63,8 +63,34 @@ _CSS = f"""
         border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 4px rgba(0,0,0,0.05);
     }}
     div[data-testid="stMetricLabel"] {{ color: {WHO_GREY}; font-weight: 600; }}
-    section[data-testid="stSidebar"] {{ background: {WHO_LIGHT}; }}
+    div[data-testid="stMetricValue"] {{ color: {WHO_DARK}; }}
     h2, h3 {{ color: {WHO_DARK}; }}
+
+    /* --- Dark sidebar with light text --- */
+    section[data-testid="stSidebar"] {{ background-color: {WHO_DARK}; }}
+    /* Labels, headings, captions, nav links, markdown -> light */
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] h1,
+    section[data-testid="stSidebar"] h2,
+    section[data-testid="stSidebar"] h3,
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] [data-testid="stWidgetLabel"],
+    section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] *,
+    section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a,
+    section[data-testid="stSidebar"] [data-testid="stSidebarNav"] span,
+    section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
+    section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] * {{
+        color: #E3F2FB !important;
+    }}
+    /* Keep input controls (multiselect, date) readable: dark text on light field */
+    section[data-testid="stSidebar"] [data-baseweb="select"],
+    section[data-testid="stSidebar"] [data-baseweb="input"] {{
+        background-color: #FFFFFF;
+    }}
+    section[data-testid="stSidebar"] [data-baseweb="select"] *,
+    section[data-testid="stSidebar"] [data-baseweb="input"] input {{
+        color: {WHO_DARK} !important;
+    }}
 </style>
 """
 

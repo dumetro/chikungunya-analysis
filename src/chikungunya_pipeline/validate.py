@@ -122,9 +122,21 @@ def _conditional_rejects(df: pd.DataFrame) -> dict[Any, list[str]]:
     return reasons
 
 
-def validate_dataframe(df: pd.DataFrame, cfg: dict | None = None) -> ValidationOutcome:
-    """Validate df; return passed/failed split with reasons."""
-    cfg = cfg or load_expectations_config()
+def validate_dataframe(
+    df: pd.DataFrame,
+    cfg: dict | None = None,
+    allowed_sets: dict[str, list] | None = None,
+) -> ValidationOutcome:
+    """Validate df; return passed/failed split with reasons.
+
+    ``allowed_sets`` (e.g. derived from analysis_lookups) overrides the
+    allowed-value sets in the config for the named columns.
+    """
+    cfg = dict(cfg or load_expectations_config())
+    if allowed_sets:
+        merged = dict(cfg.get("allowed_sets") or {})
+        merged.update({c: v for c, v in allowed_sets.items() if v})
+        cfg["allowed_sets"] = merged
     columns = set(df.columns)
 
     # --- GX column-level validation (ephemeral context) ---

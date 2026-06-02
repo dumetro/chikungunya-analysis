@@ -37,7 +37,7 @@ make test                    # unit tests
 |-------|--------|--------------|
 | Ingest | `ingest.py` | Reads the Excel sheet, maps headers → DB columns via `config/column_mapping.yaml`, keeps `_source_row` for traceability. |
 | Sanitize | `sanitize.py` | Trims/cases strings, canonical Yes/No & gender, numeric coercion, **all dates → ISO 8601** via `dates.to_iso8601()`. |
-| Normalize | `normalize.py` | Maps `occupation`/`nationality`/`symptoms`/`comorbidities_pmh` to canonical reference values via the `*_raw_map` + reference tables. Unmapped values are logged with fuzzy suggestions — never dropped. |
+| Normalize | `normalize.py` | Maps `occupation`/`nationality`/`symptoms`/`comorbidities_pmh` to canonical reference values via the `*_raw_map` + reference tables. **Lookup-coded columns** (`gender`, `age_group`, `pcr_result`, `outcome`, `local_or_imported`, `active_passive`) are normalised against `analysis_lookups` by: case-insensitive exact match → `value_overrides` synonyms → `value_patterns` regex → else kept raw and logged with fuzzy suggestions. Nothing is dropped silently. |
 | Validate | `validate.py` | Great Expectations **core** suite mirroring the DB CHECK constraints (ranges, allowed sets, date ordering, conditional rules). Splits rows into passed / rejected. |
 | Load | `load.py` | Transactional bulk insert; SHA-256 content-hash dedupe via `pipeline_load_log`; `append` or `replace` mode. |
 
@@ -51,8 +51,14 @@ returning a `datetime.date` (ISO `YYYY-MM-DD`) or `None`. Day-first by default
 
 - **`.env`** — `DATABASE_URL`, paths, `DATE_DAYFIRST`, `LOAD_MODE` (via `pydantic-settings`).
 - **`config/column_mapping.yaml`** — Excel header → DB column, date/int/Yes-No
-  column lists, coded & multivalue column entities, per-value overrides.
-  *Edit this when the spreadsheet layout changes — no code change needed.*
+  column lists, coded & multivalue column entities, `lookup_columns` (column →
+  `analysis_lookups` category), `value_overrides` (synonyms) and `value_patterns`
+  (regex → canonical). *Edit this when the spreadsheet layout changes or when the
+  unmapped-values report surfaces new variants — no code change needed.*
+- **`analysis_lookups`** is the canonical value list per category. To recognise a
+  new value, add it to the table (see `db_scripts/seed_analysis_lookups_extra.sql`)
+  or extend `value_overrides` / `value_patterns`. Offline (no DB) the pipeline
+  falls back to `data/incoming/analysis_lookups.csv`.
 - **`config/expectations.yaml`** — validation ranges, allowed value sets, date-ordering
   pairs. *Keep `Yes`/`No` quoted (unquoted they are YAML booleans).*
 

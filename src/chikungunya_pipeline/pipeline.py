@@ -1,21 +1,27 @@
-"""End-to-end pipeline orchestrator with a Typer CLI.
+"""End-to-end pipeline orchestrator with a reusable core + Typer CLI.
 
-    python -m chikungunya_pipeline.pipeline run --file data/incoming/cases.xlsx
-    python -m chikungunya_pipeline.pipeline run --file ... --dry-run
-    python -m chikungunya_pipeline.pipeline run            # newest file in INCOMING_DIR
+Ingestion is always triggered manually — by the CLI:
+
+    python -m chikungunya_pipeline.pipeline run                 # default source file
+    python -m chikungunya_pipeline.pipeline run --dry-run
+    python -m chikungunya_pipeline.pipeline run --file other.xlsx
+
+or by the "Run ingestion" button on the Streamlit dashboard, which calls
+:func:`run_pipeline` directly.
 
 Stages: ingest -> sanitize -> normalize -> validate (GX) -> load.
-With --dry-run nothing is written to the database; per-stage counts and the
-validation summary are printed and reject/unmapped artefacts are still written.
+With ``dry_run`` nothing is written to the database; per-stage counts and the
+validation summary are produced and reject/unmapped artefacts are still written.
 """
 
 from __future__ import annotations
 
 import json
 import shutil
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import typer
 
@@ -29,97 +35,165 @@ from .validate import load_expectations_config, validate_dataframe
 app = typer.Typer(add_completion=False, help="Chikungunya data-cleaning pipeline.")
 
 
-def _echo(msg: str) -> None:
-    typer.echo(msg)
-
-
-def _newest_incoming(settings) -> Optional[Path]:
-    incoming = settings.resolve(settings.incoming_dir)
-    files = sorted(
-        [p for p in incoming.glob("*.xls*")], key=lambda p: p.stat().st_mtime, reverse=True
-    )
-    return files[0] if files else None
+@dataclass
+class PipelineRunResult:
+    source: str
+    dry_run: bool
+    ingested_rows: int = 0
+    unmapped_headers: list[str] = field(default_factory=list)
+    passed: int = 0
+    failed: int = 0
+    overall_success: bool = False
+    inserted: int = 0
+    skipped_duplicate: int = 0
+    archived_to: Optional[str] = None
+    summary: dict = field(default_factory=dict)
+    messages: list[str] = field(default_factory=list)
 
 
 def _timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
-@app.command()
-def run(
-    file: Optional[Path] = typer.Option(None, "--file", "-f", help="Excel file to process."),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Do not write to the database."),
-    mode: Optional[str] = typer.Option(None, "--mode", help="append | replace (default from .env)."),
-):
-    """Run the full pipeline on one Excel file."""
+def default_source() -> Optional[Path]:
+    """The configured source workbook, else the newest file in INCOMING_DIR."""
+    settings = get_settings()
+    configured = settings.resolve(settings.source_file)
+    if configured.exists():
+        return configured
+    incoming = settings.resolve(settings.incoming_dir)
+    files = sorted(incoming.glob("*.xls*"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return files[0] if files else None
+
+
+def run_pipeline(
+    file: Optional[Path | str] = None,
+    *,
+    dry_run: bool = False,
+    mode: Optional[str] = None,
+    log: Callable[[str], None] = print,
+) -> PipelineRunResult:
+    """Run the full pipeline on one Excel file. Reusable by CLI and dashboard."""
     settings = get_settings()
     mode = mode or settings.load_mode
     rejects_dir = settings.resolve(settings.rejects_dir)
     rejects_dir.mkdir(parents=True, exist_ok=True)
 
-    src = file or _newest_incoming(settings)
-    if src is None:
-        raise typer.BadParameter("No file given and none found in INCOMING_DIR.")
+    src = Path(file) if file else default_source()
+    if src is None or not Path(src).exists():
+        raise FileNotFoundError(
+            f"Source file not found: {src or '(none configured)'}. "
+            "Set SOURCE_FILE in .env or pass an explicit file."
+        )
     src = Path(src)
-    _echo(f"[1/5] Ingesting {src} ...")
+
+    result = PipelineRunResult(source=str(src), dry_run=dry_run)
+
+    def emit(msg: str) -> None:
+        result.messages.append(msg)
+        log(msg)
+
+    emit(f"[1/5] Ingesting {src} ...")
     mapping = load_mapping()
     ingested = read_excel(src, mapping)
-    _echo(f"      rows={len(ingested.df)}  mapped={len(ingested.mapped_headers)}  "
-          f"unmapped={ingested.unmapped_headers or '-'}")
+    result.ingested_rows = len(ingested.df)
+    result.unmapped_headers = ingested.unmapped_headers
+    emit(f"      rows={result.ingested_rows}  mapped={len(ingested.mapped_headers)}")
 
-    _echo("[2/5] Sanitising ...")
+    emit("[2/5] Sanitising ...")
     clean = sanitize_dataframe(ingested.df, mapping)
 
-    _echo("[3/5] Normalising against reference tables ...")
+    emit("[3/5] Normalising against reference + lookup tables ...")
+    from .normalize import load_lookup_sets
+
+    lookup_sets = load_lookup_sets()  # DB, or seed-CSV fallback when offline
+    allowed_sets = {col: lookup_sets.allowed(cat)
+                    for col, cat in mapping.lookup_columns.items()
+                    if lookup_sets.allowed(cat)}
     try:
         normalized, unmapped = normalize_dataframe(
-            clean, mapping.coded_columns, mapping.multivalue_columns
+            clean,
+            mapping.coded_columns,
+            mapping.multivalue_columns,
+            lookup_columns=mapping.lookup_columns,
+            value_overrides=mapping.value_overrides,
+            value_patterns=mapping.value_patterns,
+            lookup_sets=lookup_sets,
         )
         if unmapped.rows:
             stamp = _timestamp()
             for col, grp in unmapped.to_frame().groupby("column"):
                 out = rejects_dir / f"unmapped_{col}_{stamp}.csv"
                 grp.drop_duplicates("raw_value").to_csv(out, index=False)
-            _echo(f"      logged {len(unmapped.rows)} unmapped value(s) for review -> {rejects_dir}")
-    except Exception as exc:  # DB unavailable in --dry-run without DB, etc.
+            emit(f"      logged {len(unmapped.rows)} unmapped value(s) for review -> {rejects_dir}")
+    except Exception as exc:
         if not dry_run:
             raise
-        _echo(f"      [skip] normalization needs DB ({exc.__class__.__name__}); continuing dry-run")
-        normalized = clean
+        emit(f"      [skip] reference normalization needs DB ({exc.__class__.__name__}); "
+             "applying lookup normalization only")
+        normalized, unmapped = normalize_dataframe(
+            clean, {}, {},
+            lookup_columns=mapping.lookup_columns,
+            value_overrides=mapping.value_overrides,
+            value_patterns=mapping.value_patterns,
+            lookup_sets=lookup_sets,
+        )
 
-    _echo("[4/5] Validating (Great Expectations) ...")
+    emit("[4/5] Validating (Great Expectations) ...")
     cfg = load_expectations_config()
-    outcome = validate_dataframe(normalized, cfg)
-    _echo(f"      passed={outcome.n_passed}  failed={outcome.n_failed}  "
-          f"overall_success={outcome.summary['overall_success']}")
+    outcome = validate_dataframe(normalized, cfg, allowed_sets=allowed_sets)
+    result.passed = outcome.n_passed
+    result.failed = outcome.n_failed
+    result.overall_success = bool(outcome.summary.get("overall_success"))
+    result.summary = outcome.summary
+    emit(f"      passed={outcome.n_passed}  failed={outcome.n_failed}  "
+         f"overall_success={result.overall_success}")
 
     stamp = _timestamp()
-    # Persist validation summary for the Data Quality dashboard page.
     (rejects_dir / f"validation_summary_{stamp}.json").write_text(
         json.dumps({"file": str(src), **outcome.summary}, indent=2)
     )
     if outcome.n_failed:
         rej = rejects_dir / f"rejects_{src.stem}_{stamp}.csv"
         outcome.failed.to_csv(rej, index=False)
-        _echo(f"      rejects written -> {rej}")
+        emit(f"      rejects written -> {rej}")
 
     if dry_run:
-        _echo("[5/5] Dry-run: skipping database load.")
-        _echo(json.dumps(outcome.summary, indent=2))
-        raise typer.Exit(0)
+        emit("[5/5] Dry-run: skipping database load.")
+        return result
 
-    _echo(f"[5/5] Loading {outcome.n_passed} row(s) into chikungunya_analysis (mode={mode}) ...")
+    emit(f"[5/5] Loading {outcome.n_passed} row(s) into chikungunya_analysis (mode={mode}) ...")
     from .load import load_dataframe  # imported here so dry-run needs no DB driver
 
     to_load = outcome.passed.drop(columns=["reject_reasons"], errors="ignore")
-    result = load_dataframe(to_load, source_file=src.name, mode=mode)
-    _echo(f"      inserted={result.n_inserted}  skipped_duplicate={result.n_skipped_duplicate}")
+    load_result = load_dataframe(to_load, source_file=src.name, mode=mode)
+    result.inserted = load_result.n_inserted
+    result.skipped_duplicate = load_result.n_skipped_duplicate
+    emit(f"      inserted={load_result.n_inserted}  skipped_duplicate={load_result.n_skipped_duplicate}")
 
     # Archive the processed file.
     archive = settings.resolve(settings.archive_dir)
     archive.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(src), str(archive / f"{src.stem}_{stamp}{src.suffix}"))
-    _echo(f"      archived source -> {archive}")
+    dest = archive / f"{src.stem}_{stamp}{src.suffix}"
+    shutil.move(str(src), str(dest))
+    result.archived_to = str(dest)
+    emit(f"      archived source -> {dest}")
+    return result
+
+
+@app.command()
+def run(
+    file: Optional[Path] = typer.Option(None, "--file", "-f", help="Excel file (default: SOURCE_FILE)."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Do not write to the database."),
+    mode: Optional[str] = typer.Option(None, "--mode", help="append | replace (default from .env)."),
+):
+    """Run the full pipeline on one Excel file."""
+    try:
+        result = run_pipeline(file, dry_run=dry_run, mode=mode, log=typer.echo)
+    except FileNotFoundError as exc:
+        raise typer.BadParameter(str(exc))
+    if dry_run:
+        typer.echo(json.dumps(result.summary, indent=2))
 
 
 @app.command()

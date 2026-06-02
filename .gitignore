@@ -7,6 +7,8 @@ build/
 src/*.egg-info/
 .env
 data/incoming/*.xls*
+data/incoming/*.xlsx
+data/incoming/*.csv
 data/archive/*
 data/rejects/*
 !data/incoming/.gitkeep

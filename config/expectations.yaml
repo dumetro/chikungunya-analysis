@@ -8,16 +8,16 @@ ranges:
 # Allowed value sets (post-sanitisation). Leave a column out to skip the check.
 # NB: keep "Yes"/"No" quoted — unquoted yes/no are YAML booleans.
 allowed_sets:
-  gender: [Male, Female]
+  gender: [Male, Female, Unknown]
   past_history_of_chikungunya: ["Yes", "No"]
   pregnancy: ["Yes", "No"]
   if_admitted: ["Yes", "No"]
-  # The sets below should match values present in analysis_lookups. Adjust to
-  # your canonical labels once confirmed.
+  age_group: ["0-19", "20-39", "40-59", "60-150"]
+  # These mirror analysis_lookups (the live DB values override these at runtime).
   active_passive: [Active, Passive]
-  local_or_imported: [Local, Imported]
-  pcr_result: [Positive, Negative, Pending, Indeterminate]
-  outcome: [Recovered, Active, Hospitalised, Deceased]
+  local_or_imported: [Local, Imported, Unknown]
+  pcr_result: [Positive, Negative, Pending, "Not Done"]
+  outcome: [Alive, Deceased, "Lost to Follow-up", Discharged, Unknown]
 
 # Cross-field date ordering: column `later` must be >= column `earlier`.
 date_order:

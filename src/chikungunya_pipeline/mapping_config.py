@@ -27,7 +27,9 @@ class ColumnMapping:
     yes_no_columns: list[str] = field(default_factory=list)
     multivalue_columns: dict[str, str] = field(default_factory=dict)  # db col -> entity
     coded_columns: dict[str, str] = field(default_factory=dict)  # db col -> entity
+    lookup_columns: dict[str, str] = field(default_factory=dict)  # db col -> lk_category
     value_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
+    value_patterns: dict[str, dict[str, str]] = field(default_factory=dict)  # db col -> {regex: canonical}
 
     def db_column_for(self, excel_header: str) -> str | None:
         return self.columns.get(_norm_header(excel_header))
@@ -45,6 +47,10 @@ def load_mapping(path: Path | None = None) -> ColumnMapping:
         col: {str(k).strip().lower(): v for k, v in (m or {}).items()}
         for col, m in (raw.get("value_overrides") or {}).items()
     }
+    patterns = {
+        col: {str(k): v for k, v in (m or {}).items()}
+        for col, m in (raw.get("value_patterns") or {}).items()
+    }
     return ColumnMapping(
         sheet=raw.get("sheet", 0),
         header_row=raw.get("header_row", 0),
@@ -54,5 +60,7 @@ def load_mapping(path: Path | None = None) -> ColumnMapping:
         yes_no_columns=list(raw.get("yes_no_columns") or []),
         multivalue_columns=dict(raw.get("multivalue_columns") or {}),
         coded_columns=dict(raw.get("coded_columns") or {}),
+        lookup_columns=dict(raw.get("lookup_columns") or {}),
         value_overrides=overrides,
+        value_patterns=patterns,
     )

@@ -1,0 +1,9 @@
+# Pin the dashboard to a light base theme so the WHO styling renders
+# consistently regardless of the viewer's OS dark-mode setting.
+[theme]
+base = "light"
+primaryColor = "#0093D5"          # WHO blue
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F4F8FB"
+textColor = "#1F2937"             # dark slate — readable on light surfaces
+font = "sans serif"
