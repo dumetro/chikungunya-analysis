@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+build/
+*.egg-info/
+src/*.egg-info/
+.env
+data/incoming/*.xls*
+data/archive/*
+data/rejects/*
+!data/incoming/.gitkeep
+!data/archive/.gitkeep
+!data/rejects/.gitkeep
+gx/uncommitted/

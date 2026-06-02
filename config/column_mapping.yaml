@@ -1,0 +1,84 @@
+# Maps the source Excel layout to the chikungunya_analysis DB columns.
+#
+# Edit this file when the Excel headers change — no code change required.
+# Header matching is case-insensitive and whitespace-insensitive.
+
+# Which sheet to read (name or 0-based index) and which row holds the headers.
+sheet: 0
+header_row: 0
+
+# Excel header  ->  DB column name.
+# Left side: the header as it appears in the spreadsheet (any case / spacing).
+# Right side: the target column in public.chikungunya_analysis.
+columns:
+  "Date of Notification": date_of_notification
+  "Date of Sample Taken": date_of_sample_taken
+  "Epi Week": epi_week
+  "Active/Passive": active_passive
+  "Health Region": health_region
+  "Health Office": health_office
+  "Locality": locality
+  "Age": age
+  "Age Group": age_group
+  "Gender": gender
+  "Sex": gender
+  "Nationality": nationality
+  "Occupation": occupation
+  "Past History of Chikungunya": past_history_of_chikungunya
+  "Pregnancy": pregnancy
+  "Gestation Week": gestation_week
+  "Comorbidities/PMH": comorbidities_pmh
+  "Comorbidities": comorbidities_pmh
+  "Date of Onset of Symptoms": date_of_onset_symptoms
+  "Symptoms": symptoms
+  "Epi Linkage": epi_linkage
+  "Local or Imported": local_or_imported
+  "Health Institution Attended": health_institution_attended
+  "Date Attended": date_attended
+  "Health Institution": health_institution
+  "If Admitted": if_admitted
+  "Date of Admission": date_of_admission
+  "PCR Result": pcr_result
+  "Date of Negative PCR": date_of_negative_pcr
+  "Outcome": outcome
+  "DMU/Hospitalised/TBA/Missing": dmu_hospitalised_tba_missing
+  "Remarks": remarks
+
+# Columns that must be routed through dates.to_iso8601().
+date_columns:
+  - date_of_notification
+  - date_of_sample_taken
+  - date_of_onset_symptoms
+  - date_attended
+  - date_of_admission
+  - date_of_negative_pcr
+
+# Integer columns.
+integer_columns:
+  - age
+  - gestation_week
+
+# Yes/No columns (canonicalised to Yes / No / Unknown).
+yes_no_columns:
+  - past_history_of_chikungunya
+  - pregnancy
+  - if_admitted
+
+# Free-text multi-value columns normalised against *_raw_map tables.
+multivalue_columns:
+  symptoms: symptom
+  comorbidities_pmh: comorbidity
+
+# Single-value coded columns normalised against a raw_map / reference table.
+coded_columns:
+  occupation: occupation
+  nationality: nationality
+
+# Optional per-value overrides applied during sanitisation, by DB column.
+# Useful for obvious one-off fixes before reference-table normalisation.
+value_overrides:
+  gender:
+    "m": "Male"
+    "f": "Female"
+    "male": "Male"
+    "female": "Female"

@@ -1,0 +1,32 @@
+# Tunable validation thresholds for the Great Expectations suite.
+# Edit allowed sets / ranges here without touching code.
+
+ranges:
+  age: {min: 0, max: 120}
+  gestation_week: {min: 4, max: 42}
+
+# Allowed value sets (post-sanitisation). Leave a column out to skip the check.
+# NB: keep "Yes"/"No" quoted — unquoted yes/no are YAML booleans.
+allowed_sets:
+  gender: [Male, Female]
+  past_history_of_chikungunya: ["Yes", "No"]
+  pregnancy: ["Yes", "No"]
+  if_admitted: ["Yes", "No"]
+  # The sets below should match values present in analysis_lookups. Adjust to
+  # your canonical labels once confirmed.
+  active_passive: [Active, Passive]
+  local_or_imported: [Local, Imported]
+  pcr_result: [Positive, Negative, Pending, Indeterminate]
+  outcome: [Recovered, Active, Hospitalised, Deceased]
+
+# Cross-field date ordering: column `later` must be >= column `earlier`.
+date_order:
+  - {later: date_of_sample_taken, earlier: date_of_onset_symptoms}
+  - {later: date_of_notification, earlier: date_of_onset_symptoms}
+  - {later: date_of_admission, earlier: date_attended}
+  - {later: date_of_negative_pcr, earlier: date_of_sample_taken}
+
+# Conditional rules enforced in pandas (mirror DB CHECK constraints):
+#   gestation_week present  -> pregnancy == 'Yes'
+#   if_admitted == 'Yes'    -> date_of_admission present
+conditional_rules: true
