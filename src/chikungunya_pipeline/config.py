@@ -25,15 +25,14 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    database_url: str = Field(
-        default="postgresql+psycopg2://postgres:postgres@localhost:5432/chikungunya",
-        alias="DATABASE_URL",
-    )
+    # Required — sourced from DATABASE_URL in the .env file (or the environment).
+    # No default: a missing value raises a clear validation error rather than
+    # silently connecting to placeholder credentials.
+    database_url: str = Field(alias="DATABASE_URL")
 
-    # Default source workbook used whenever a file is not given explicitly.
-    source_file: Path = Field(
-        default=Path("data/incoming/Chikungunya_mau_2026.xlsx"), alias="SOURCE_FILE"
-    )
+    # Required — source workbook used whenever a file is not given explicitly.
+    # Sourced from SOURCE_FILE in the .env file (or the environment); no default.
+    source_file: Path = Field(alias="SOURCE_FILE")
 
     incoming_dir: Path = Field(default=Path("data/incoming"), alias="INCOMING_DIR")
     rejects_dir: Path = Field(default=Path("data/rejects"), alias="REJECTS_DIR")

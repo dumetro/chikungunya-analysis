@@ -12,6 +12,7 @@ Quality dashboard page.
 
 from __future__ import annotations
 
+import datetime as _dt
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -103,8 +104,73 @@ def _collect_unexpected(result_dict: dict) -> tuple[set, str]:
     return rows, f"{label}[{target}]"
 
 
-def _conditional_rejects(df: pd.DataFrame) -> dict[Any, list[str]]:
-    """Pandas checks mirroring DB CHECK constraints. Keyed by _source_row."""
+def _is_int_like(v: Any) -> bool:
+    if isinstance(v, bool):
+        return True
+    if isinstance(v, int):
+        return True
+    if isinstance(v, float):
+        return float(v).is_integer()
+    if isinstance(v, str):
+        try:
+            return float(v).is_integer()
+        except ValueError:
+            return False
+    return False
+
+
+def _is_date_like(v: Any) -> bool:
+    return isinstance(v, (_dt.date, _dt.datetime, pd.Timestamp))
+
+
+def _schema_rejects(df: pd.DataFrame, schema: dict[str, dict], flag) -> None:
+    """Reject rows whose values violate the target table's column attributes:
+    nullability, type (int / date / bool), varchar length and integer range."""
+    for col, spec in schema.items():
+        if col not in df.columns:
+            continue
+        s = df[col]
+        kind = spec.get("kind")
+        length = spec.get("length")
+
+        if not spec.get("nullable", True):
+            flag(s.map(lambda v: v is None or (isinstance(v, float) and pd.isna(v))),
+                 f"{col} must not be null")
+
+        if kind == "str" and length:
+            flag(s.map(lambda v: v is not None and len(str(v)) > length),
+                 f"{col} exceeds max length {length}")
+        elif kind == "int":
+            flag(s.map(lambda v: v is not None and not _is_int_like(v)),
+                 f"{col} is not an integer")
+            mn, mx = spec.get("min"), spec.get("max")
+            if mn is not None and mx is not None:
+                flag(
+                    s.map(lambda v: v is not None and _is_int_like(v)
+                          and not (mn <= int(float(v)) <= mx)),
+                    f"{col} outside column range [{mn}, {mx}]",
+                )
+        elif kind == "date":
+            flag(s.map(lambda v: v is not None and not _is_date_like(v)),
+                 f"{col} is not a valid date")
+        elif kind == "bool":
+            flag(s.map(lambda v: v is not None and not isinstance(v, bool)),
+                 f"{col} is not boolean")
+
+
+def _conditional_rejects(
+    df: pd.DataFrame,
+    max_lengths: dict[str, int] | None = None,
+    schema: dict[str, dict] | None = None,
+) -> dict[Any, list[str]]:
+    """Pandas checks: DB CHECK constraints + target-schema column attributes.
+
+    Keyed by _source_row. ``schema`` ({column: {kind, length, nullable, min,
+    max}}, from load.target_schema) validates source values against the target
+    table's type / nullability / length / range, catching mismatches before
+    they raise a DB error on load. ``max_lengths`` is a lightweight subset
+    (length only) kept for callers that only have that.
+    """
     reasons: dict[Any, list[str]] = {}
 
     def flag(mask: pd.Series, reason: str):
@@ -119,6 +185,14 @@ def _conditional_rejects(df: pd.DataFrame) -> dict[Any, list[str]]:
         bad = (df["if_admitted"] == "Yes") & df["date_of_admission"].isna()
         flag(bad, "admitted=Yes but date_of_admission missing")
 
+    if schema:
+        _schema_rejects(df, schema, flag)
+
+    for col, limit in (max_lengths or {}).items():
+        if col in df.columns:
+            lengths = df[col].map(lambda v: len(str(v)) if v is not None else 0)
+            flag(lengths > limit, f"{col} exceeds max length {limit}")
+
     return reasons
 
 
@@ -126,11 +200,16 @@ def validate_dataframe(
     df: pd.DataFrame,
     cfg: dict | None = None,
     allowed_sets: dict[str, list] | None = None,
+    max_lengths: dict[str, int] | None = None,
+    schema: dict[str, dict] | None = None,
 ) -> ValidationOutcome:
     """Validate df; return passed/failed split with reasons.
 
     ``allowed_sets`` (e.g. derived from analysis_lookups) overrides the
-    allowed-value sets in the config for the named columns.
+    allowed-value sets in the config for the named columns. ``schema`` (from
+    load.target_schema) validates source values against the target table's
+    column attributes (type / nullability / length / range). ``max_lengths``
+    is a length-only subset kept for lightweight callers.
     """
     cfg = dict(cfg or load_expectations_config())
     if allowed_sets:
@@ -169,9 +248,9 @@ def validate_dataframe(
         for sr in bad_rows:
             reasons.setdefault(sr, []).append(label)
 
-    # --- Conditional pandas checks ---
+    # --- Conditional pandas checks + target-schema attribute checks ---
     if cfg.get("conditional_rules", True):
-        for sr, why in _conditional_rejects(df).items():
+        for sr, why in _conditional_rejects(df, max_lengths, schema).items():
             reasons.setdefault(sr, []).extend(why)
 
     failed_rows = set(reasons)

@@ -11,7 +11,9 @@ from theme import who_style as who
 
 st.set_page_config(page_title="Geographic", page_icon="🗺️", layout="wide")
 who.apply_theme()
-who.header("Geographic Distribution", "Cases by health region, locality and origin")
+who.top_nav(active="Geographic")
+who.header("Geographic Distribution", "Cases by health region, locality and origin",
+           eyebrow="Where")
 
 df = load_cases()
 fdf = apply_filters(df, sidebar_filters(df))

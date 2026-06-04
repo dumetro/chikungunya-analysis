@@ -20,16 +20,25 @@ from data_access import load_cases  # noqa: E402
 
 st.set_page_config(page_title="Data Quality", page_icon="✅", layout="wide")
 who.apply_theme()
-who.header("Data Quality", "Run ingestion, review the latest validation run and rejected rows")
+who.top_nav(active="Data Quality")
+who.header("Data Quality", "Run ingestion, review the latest validation run and rejected rows",
+           eyebrow="Pipeline")
 
 settings = get_settings()
 rejects_dir = settings.resolve(settings.rejects_dir)
+
+def _latest(glob: str) -> "Path | None":
+    files = sorted(rejects_dir.glob(glob), key=lambda p: p.stat().st_mtime, reverse=True)
+    return files[0] if files else None
+
 
 # --- Manual ingestion trigger ---------------------------------------------
 st.subheader("Run data ingestion")
 src = default_source()
 st.caption(f"Source workbook: `{src}`" if src else "No source workbook configured.")
-col_a, col_b, _ = st.columns([1, 1, 2])
+
+# Centre the two action buttons using spacer columns.
+_, col_a, col_b, _ = st.columns([1, 1.5, 1.5, 1])
 dry = col_a.button("Validate only (dry-run)", use_container_width=True)
 live = col_b.button("Ingest & load to DB", type="primary", use_container_width=True)
 
@@ -50,54 +59,71 @@ if dry or live:
             m4.metric("Inserted" if not dry else "Would load",
                       res.inserted if not dry else res.passed)
             if not dry:
-                st.caption(f"Skipped duplicates: {res.skipped_duplicate}"
-                           + (f" · archived → {res.archived_to}" if res.archived_to else ""))
+                st.caption(
+                    f"Inserted: {res.inserted} · skipped duplicates: {res.skipped_duplicate} "
+                    f"· DB-rejected: {res.load_failed}"
+                    + (f" · archived → {res.archived_to}" if res.archived_to else "")
+                )
+                if res.load_failed:
+                    st.warning(
+                        f"{res.load_failed} row(s) were rejected by the database and "
+                        "quarantined to a load_errors CSV (see Rejected rows below)."
+                    )
                 load_cases.clear()  # refresh dashboard data on next view
 
 st.divider()
 
+# Everything below the buttons sits in a margin-constrained container
+# (.st-key-dq_content) so wide tables never overflow the viewport.
+with st.container(key="dq_content"):
+    summary_file = _latest("validation_summary_*.json")
+    if summary_file is None:
+        st.info("No validation runs found yet. Run the pipeline to populate this page.")
+        st.stop()
 
-def _latest(glob: str) -> Path | None:
-    files = sorted(rejects_dir.glob(glob), key=lambda p: p.stat().st_mtime, reverse=True)
-    return files[0] if files else None
+    summary = json.loads(summary_file.read_text())
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Rows in file", summary.get("n_input", 0))
+    c2.metric("Passed", summary.get("n_passed", 0))
+    c3.metric("Failed", summary.get("n_failed", 0))
+    c4.metric("Overall", "PASS" if summary.get("overall_success") else "FAIL")
+    st.caption(f"Source: {summary.get('file', '?')} · report: {summary_file.name}")
 
+    st.subheader("Expectation results")
+    exp = pd.DataFrame(summary.get("expectations", []))
+    if not exp.empty:
+        def _row_style(r):
+            bg = "#E9F7E5" if r["success"] else "#FBE4E6"
+            return [f"background-color: {bg}; color: #1F2937"] * len(r)
+        st.dataframe(exp.style.apply(_row_style, axis=1), use_container_width=True, hide_index=True)
 
-summary_file = _latest("validation_summary_*.json")
-if summary_file is None:
-    st.info("No validation runs found yet. Run the pipeline to populate this page.")
-    st.stop()
+    st.subheader("Rejected rows (failed validation)")
+    rej = _latest("rejects_*.csv")
+    if rej is not None:
+        rdf = pd.read_csv(rej)
+        st.caption(f"{len(rdf)} rejected row(s) · {rej.name}")
+        st.dataframe(rdf, use_container_width=True, hide_index=True)
+        st.download_button("Download rejects CSV", rdf.to_csv(index=False), file_name=rej.name)
+    else:
+        st.success("No rejected rows in the latest run.")
 
-summary = json.loads(summary_file.read_text())
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Rows in file", summary.get("n_input", 0))
-c2.metric("Passed", summary.get("n_passed", 0))
-c3.metric("Failed", summary.get("n_failed", 0))
-c4.metric("Overall", "PASS" if summary.get("overall_success") else "FAIL")
-st.caption(f"Source: {summary.get('file', '?')} · report: {summary_file.name}")
+    st.subheader("Rows rejected by the database (during load)")
+    load_err = _latest("load_errors_*.csv")
+    if load_err is not None:
+        ldf = pd.read_csv(load_err)
+        st.caption(f"{len(ldf)} DB-rejected row(s) · {load_err.name}")
+        st.dataframe(ldf, use_container_width=True, hide_index=True)
+        st.download_button("Download load errors CSV", ldf.to_csv(index=False),
+                           file_name=load_err.name)
+    else:
+        st.success("No database load errors in the latest run.")
 
-st.subheader("Expectation results")
-exp = pd.DataFrame(summary.get("expectations", []))
-if not exp.empty:
-    def _row_style(r):
-        bg = "#E9F7E5" if r["success"] else "#FBE4E6"
-        return [f"background-color: {bg}; color: #1F2937"] * len(r)
-    st.dataframe(exp.style.apply(_row_style, axis=1), use_container_width=True, hide_index=True)
-
-st.subheader("Rejected rows")
-rej = _latest("rejects_*.csv")
-if rej is not None:
-    rdf = pd.read_csv(rej)
-    st.caption(f"{len(rdf)} rejected row(s) · {rej.name}")
-    st.dataframe(rdf, use_container_width=True, hide_index=True)
-    st.download_button("Download rejects CSV", rdf.to_csv(index=False), file_name=rej.name)
-else:
-    st.success("No rejected rows in the latest run.")
-
-st.subheader("Unmapped reference values (need review)")
-unmapped_files = sorted(rejects_dir.glob("unmapped_*.csv"), key=lambda p: p.stat().st_mtime, reverse=True)
-if unmapped_files:
-    for f in unmapped_files[:6]:
-        with st.expander(f.name):
-            st.dataframe(pd.read_csv(f), use_container_width=True, hide_index=True)
-else:
-    st.success("No unmapped values logged.")
+    st.subheader("Unmapped reference values (need review)")
+    unmapped_files = sorted(rejects_dir.glob("unmapped_*.csv"),
+                            key=lambda p: p.stat().st_mtime, reverse=True)
+    if unmapped_files:
+        for f in unmapped_files[:6]:
+            with st.expander(f.name):
+                st.dataframe(pd.read_csv(f), use_container_width=True, hide_index=True)
+    else:
+        st.success("No unmapped values logged.")

@@ -11,10 +11,21 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
 
 import pandas as pd
-from sqlalchemy import Engine, inspect, text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Date,
+    DateTime,
+    Engine,
+    Float,
+    Integer,
+    Numeric,
+    SmallInteger,
+    inspect,
+    text,
+)
 
 from .db import get_engine
 
@@ -40,11 +51,69 @@ class LoadResult:
     n_inserted: int
     n_skipped_duplicate: int
     source_file: str
+    n_failed: int = 0
+    failures: "pd.DataFrame | None" = None  # failed rows + 'load_error' column
 
 
 def _target_columns(engine: Engine) -> list[str]:
     cols = [c["name"] for c in inspect(engine).get_columns(TARGET_TABLE)]
     return [c for c in cols if c not in _NON_SOURCE]
+
+
+def column_max_lengths(engine: Engine | None = None, table: str = TARGET_TABLE) -> dict[str, int]:
+    """Return {column: max_length} for VARCHAR/CHAR columns of a table.
+
+    Used by validation to reject over-length values before they reach the DB.
+    """
+    engine = engine or get_engine()
+    out: dict[str, int] = {}
+    for col in inspect(engine).get_columns(table):
+        length = getattr(col.get("type"), "length", None)
+        if isinstance(length, int) and length > 0:
+            out[col["name"]] = length
+    return out
+
+
+def _column_kind(sa_type) -> tuple[str, "int | None", "int | None"]:
+    """Map a SQLAlchemy column type to (kind, min, max) for validation."""
+    if isinstance(sa_type, Boolean):
+        return "bool", None, None
+    if isinstance(sa_type, SmallInteger):
+        return "int", -32768, 32767
+    if isinstance(sa_type, BigInteger):
+        return "int", None, None
+    if isinstance(sa_type, Integer):
+        return "int", -2147483648, 2147483647
+    if isinstance(sa_type, (Date, DateTime)):
+        return "date", None, None
+    if isinstance(sa_type, (Numeric, Float)):
+        return "float", None, None
+    return "str", None, None
+
+
+def target_schema(engine: Engine | None = None, table: str = TARGET_TABLE) -> dict[str, dict]:
+    """Introspect the target table into per-column specs for validation.
+
+    Returns {column: {kind, length, nullable, min, max}} for every source
+    column, so validation can enforce the source data against the actual DB
+    schema (type, nullability, varchar length, integer range) before load.
+    """
+    engine = engine or get_engine()
+    specs: dict[str, dict] = {}
+    for col in inspect(engine).get_columns(table):
+        name = col["name"]
+        if name in _NON_SOURCE:
+            continue
+        kind, mn, mx = _column_kind(col.get("type"))
+        length = getattr(col.get("type"), "length", None)
+        specs[name] = {
+            "kind": kind,
+            "length": length if isinstance(length, int) else None,
+            "nullable": bool(col.get("nullable", True)),
+            "min": mn,
+            "max": mx,
+        }
+    return specs
 
 
 def _row_hash(row: dict, columns: list[str]) -> str:
@@ -87,23 +156,34 @@ def load_dataframe(
         )
 
         inserted = skipped = 0
-        now = datetime.now(timezone.utc)
+        failures: list[dict] = []
         for record in df.to_dict(orient="records"):
             h = _row_hash(record, columns)
             if h in existing:
                 skipped += 1
                 continue
             params = {c: record.get(c) for c in insert_cols}
-            conn.execute(insert_sql, params)
-            conn.execute(
-                log_sql, {"h": h, "f": source_file, "r": int(record.get("_source_row") or 0)}
-            )
-            existing.add(h)
-            inserted += 1
+            try:
+                # Per-row savepoint: a bad row rolls back only itself, so one
+                # failure never aborts the whole batch.
+                with conn.begin_nested():
+                    conn.execute(insert_sql, params)
+                    conn.execute(
+                        log_sql,
+                        {"h": h, "f": source_file, "r": int(record.get("_source_row") or 0)},
+                    )
+                existing.add(h)
+                inserted += 1
+            except Exception as exc:  # capture & quarantine the row, keep going
+                reason = str(getattr(exc, "orig", exc)).splitlines()[0].strip()
+                failures.append({**record, "load_error": reason})
 
+    failures_df = pd.DataFrame(failures) if failures else None
     return LoadResult(
         n_candidate=len(df),
         n_inserted=inserted,
         n_skipped_duplicate=skipped,
         source_file=source_file,
+        n_failed=len(failures),
+        failures=failures_df,
     )

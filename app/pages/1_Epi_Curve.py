@@ -11,7 +11,9 @@ from theme import who_style as who
 
 st.set_page_config(page_title="Epi Curve", page_icon="📈", layout="wide")
 who.apply_theme()
-who.header("Epidemic Curve", "Case counts over time by onset and notification date")
+who.top_nav(active="Epi Curve")
+who.header("Epidemic Curve", "Case counts over time by onset and notification date",
+           eyebrow="Time Trends")
 
 df = load_cases()
 fdf = apply_filters(df, sidebar_filters(df))

@@ -46,6 +46,7 @@ class PipelineRunResult:
     overall_success: bool = False
     inserted: int = 0
     skipped_duplicate: int = 0
+    load_failed: int = 0
     archived_to: Optional[str] = None
     summary: dict = field(default_factory=dict)
     messages: list[str] = field(default_factory=list)
@@ -141,7 +142,16 @@ def run_pipeline(
 
     emit("[4/5] Validating (Great Expectations) ...")
     cfg = load_expectations_config()
-    outcome = validate_dataframe(normalized, cfg, allowed_sets=allowed_sets)
+    # Introspect the target table so we can validate source values against the
+    # real schema (type / nullability / varchar length / int range) and reject
+    # mismatches before they raise a DB error on load.
+    try:
+        from .load import target_schema
+
+        schema = target_schema()
+    except Exception:
+        schema = {}
+    outcome = validate_dataframe(normalized, cfg, allowed_sets=allowed_sets, schema=schema)
     result.passed = outcome.n_passed
     result.failed = outcome.n_failed
     result.overall_success = bool(outcome.summary.get("overall_success"))
@@ -169,7 +179,15 @@ def run_pipeline(
     load_result = load_dataframe(to_load, source_file=src.name, mode=mode)
     result.inserted = load_result.n_inserted
     result.skipped_duplicate = load_result.n_skipped_duplicate
-    emit(f"      inserted={load_result.n_inserted}  skipped_duplicate={load_result.n_skipped_duplicate}")
+    result.load_failed = load_result.n_failed
+    emit(f"      inserted={load_result.n_inserted}  "
+         f"skipped_duplicate={load_result.n_skipped_duplicate}  failed={load_result.n_failed}")
+
+    # Any rows the DB rejected (despite validation) are quarantined, not lost.
+    if load_result.n_failed and load_result.failures is not None:
+        err_path = rejects_dir / f"load_errors_{src.stem}_{stamp}.csv"
+        load_result.failures.to_csv(err_path, index=False)
+        emit(f"      {load_result.n_failed} row(s) rejected by DB -> {err_path}")
 
     # Archive the processed file.
     archive = settings.resolve(settings.archive_dir)

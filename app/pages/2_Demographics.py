@@ -13,7 +13,9 @@ from theme import who_style as who
 
 st.set_page_config(page_title="Demographics", page_icon="👥", layout="wide")
 who.apply_theme()
-who.header("Demographics", "Age, sex, nationality and occupation distribution")
+who.top_nav(active="Demographics")
+who.header("Demographics", "Age, sex, nationality and occupation distribution",
+           eyebrow="Who Is Affected")
 
 df = load_cases()
 fdf = apply_filters(df, sidebar_filters(df))

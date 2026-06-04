@@ -11,7 +11,9 @@ from theme import who_style as who
 
 st.set_page_config(page_title="Clinical", page_icon="🩺", layout="wide")
 who.apply_theme()
-who.header("Clinical Profile", "Symptoms, comorbidities, laboratory results and outcomes")
+who.top_nav(active="Clinical")
+who.header("Clinical Profile", "Symptoms, comorbidities, laboratory results and outcomes",
+           eyebrow="Clinical")
 
 df = load_cases()
 fdf = apply_filters(df, sidebar_filters(df))

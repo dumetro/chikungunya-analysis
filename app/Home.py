@@ -16,10 +16,12 @@ from theme import who_style as who
 
 st.set_page_config(page_title="Chikungunya Surveillance", page_icon="🦟", layout="wide")
 who.apply_theme()
+who.top_nav(active="Overview")
 
 who.header(
     "Chikungunya Outbreak Surveillance",
     f"Case-level analysis dashboard · data as of {date.today().isoformat()}",
+    eyebrow="WHO Surveillance Dashboard",
 )
 
 try:
@@ -52,7 +54,7 @@ st.divider()
 # --- Epi curve preview -----------------------------------------------------
 left, right = st.columns([2, 1])
 with left:
-    st.subheader("Epidemic curve (by onset week)")
+    who.section("Epidemic curve (by onset week)", "Time trend")
     if "date_of_onset_symptoms" in fdf and fdf["date_of_onset_symptoms"].notna().any():
         weekly = (
             fdf.dropna(subset=["date_of_onset_symptoms"])
@@ -68,7 +70,7 @@ with left:
         st.info("No onset dates available for the current filter.")
 
 with right:
-    st.subheader("Local vs imported")
+    who.section("Local vs imported", "Transmission")
     if "local_or_imported" in fdf:
         counts = fdf["local_or_imported"].fillna("Unknown").value_counts().reset_index()
         counts.columns = ["local_or_imported", "cases"]
