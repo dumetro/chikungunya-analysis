@@ -140,6 +140,17 @@ def run_pipeline(
             lookup_sets=lookup_sets,
         )
 
+    # Derive the WHO/PAHO case classification from the normalised columns so it
+    # is validated and persisted alongside the case.
+    try:
+        from .classify import classify_cases
+
+        normalized["case_classification"] = classify_cases(normalized)
+        emit("      derived case_classification "
+             f"({normalized['case_classification'].value_counts().to_dict()})")
+    except Exception as exc:
+        emit(f"      [skip] case classification ({exc.__class__.__name__})")
+
     emit("[4/5] Validating (Great Expectations) ...")
     cfg = load_expectations_config()
     # Introspect the target table so we can validate source values against the

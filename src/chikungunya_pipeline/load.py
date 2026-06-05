@@ -35,6 +35,16 @@ LOG_TABLE = "pipeline_load_log"
 # Columns that are never written from source data.
 _NON_SOURCE = {"id", "created_at", "updated_at", "_source_row", "reject_reasons"}
 
+# Pipeline-derived columns: written to the DB, but excluded from the idempotency
+# hash so re-deriving them never changes a row's identity.
+_DERIVED = {"case_classification"}
+
+# Idempotently ensure pipeline-managed columns exist before loading.
+_ENSURE_COLUMNS = (
+    f"ALTER TABLE public.{TARGET_TABLE} "
+    "ADD COLUMN IF NOT EXISTS case_classification varchar(20)",
+)
+
 _CREATE_LOG = f"""
 CREATE TABLE IF NOT EXISTS public.{LOG_TABLE} (
     load_hash  text PRIMARY KEY,
@@ -132,8 +142,13 @@ def load_dataframe(
 ) -> LoadResult:
     """Insert validated rows. mode='replace' truncates the table first."""
     engine = engine or get_engine()
+    # Ensure derived columns exist, then introspect so they're picked up.
+    with engine.begin() as conn:
+        for stmt in _ENSURE_COLUMNS:
+            conn.execute(text(stmt))
     columns = _target_columns(engine)
     insert_cols = [c for c in columns if c in df.columns]
+    hash_columns = [c for c in columns if c not in _DERIVED]
 
     with engine.begin() as conn:
         conn.execute(text(_CREATE_LOG))
@@ -158,7 +173,7 @@ def load_dataframe(
         inserted = skipped = 0
         failures: list[dict] = []
         for record in df.to_dict(orient="records"):
-            h = _row_hash(record, columns)
+            h = _row_hash(record, hash_columns)
             if h in existing:
                 skipped += 1
                 continue

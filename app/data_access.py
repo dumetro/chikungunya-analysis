@@ -19,6 +19,7 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from chikungunya_pipeline.db import get_engine  # noqa: E402
+from chikungunya_pipeline.classify import classify_cases  # noqa: E402
 
 DATE_COLS = [
     "date_of_notification", "date_of_sample_taken", "date_of_onset_symptoms",
@@ -28,12 +29,25 @@ DATE_COLS = [
 
 @st.cache_data(ttl=300, show_spinner="Loading case data …")
 def load_cases() -> pd.DataFrame:
-    """Load the full case table with parsed dates."""
+    """Load the full case table with parsed dates and a derived case classification."""
     engine = get_engine()
     df = pd.read_sql("SELECT * FROM public.chikungunya_analysis", engine)
     for c in DATE_COLS:
         if c in df.columns:
             df[c] = pd.to_datetime(df[c], errors="coerce")
+    # WHO/PAHO case classification: prefer the persisted column, derive any gaps
+    # (e.g. rows loaded before the column existed).
+    try:
+        if "case_classification" not in df.columns:
+            df["case_classification"] = classify_cases(df)
+        else:
+            missing = df["case_classification"].isna() | (
+                df["case_classification"].astype(str).str.strip() == ""
+            )
+            if missing.any():
+                df.loc[missing, "case_classification"] = classify_cases(df.loc[missing])
+    except Exception:
+        df["case_classification"] = df.get("case_classification", "Unclassified")
     return df
 
 

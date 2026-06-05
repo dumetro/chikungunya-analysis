@@ -18,6 +18,31 @@ who.header("Clinical Profile", "Symptoms, comorbidities, laboratory results and 
 df = load_cases()
 fdf = apply_filters(df, sidebar_filters(df))
 
+# --- Case classification (WHO/PAHO) ---------------------------------------
+if "case_classification" in fdf.columns:
+    who.section("Case classification", "WHO / PAHO surveillance definition")
+    order = ["Confirmed", "Probable", "Suspected", "Unclassified"]
+    counts = (
+        fdf["case_classification"].value_counts()
+        .reindex(order).dropna().reset_index()
+    )
+    counts.columns = ["classification", "cases"]
+    kpi = fdf["case_classification"].value_counts()
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Confirmed", int(kpi.get("Confirmed", 0)))
+    k2.metric("Probable", int(kpi.get("Probable", 0)))
+    k3.metric("Suspected", int(kpi.get("Suspected", 0)))
+    k4.metric("Unclassified", int(kpi.get("Unclassified", 0)))
+    color_map = {"Confirmed": who.WHO_RED, "Probable": who.WHO_AMBER,
+                 "Suspected": who.WHO_BLUE, "Unclassified": who.WHO_GREY}
+    fig = px.bar(counts, x="classification", y="cases", color="classification",
+                 color_discrete_map=color_map)
+    fig.update_layout(showlegend=False)
+    st.plotly_chart(who.style_fig(fig, height=340), use_container_width=True)
+    st.caption("Derived per row from PCR result, epi-linkage and clinical symptoms "
+               "(see config/case_definitions.yaml).")
+    st.divider()
+
 c1, c2 = st.columns(2)
 with c1:
     st.subheader("Symptom frequency")
