@@ -164,8 +164,8 @@ _CSS = f"""
     hr {{ border-color: {BORDER}; }}
     .stDivider {{ border-color: {BORDER}; }}
 
-    /* Margin-constrained content container (Data Quality page) */
-    .st-key-dq_content {{
+    /* Margin-constrained content containers (Data Quality / Data Lineage) */
+    .st-key-dq_content, .st-key-lineage_content {{
         margin-left: 5px; margin-right: 5px;
         max-width: calc(100% - 10px); overflow-x: auto;
     }}
@@ -201,6 +201,7 @@ NAV_PAGES = [
     ("/Clinical", "Clinical"),
     ("/Geographic", "Geographic"),
     ("/Data_Quality", "Data Quality"),
+    ("/Data_Lineage", "Data Lineage"),
 ]
 
 BRAND = "Chikungunya Surveillance"

@@ -7,6 +7,7 @@ epi-week ordering, date filters). All queries are cached so pages are snappy.
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -49,6 +50,88 @@ def load_cases() -> pd.DataFrame:
     except Exception:
         df["case_classification"] = df.get("case_classification", "Unclassified")
     return df
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def load_transformations() -> pd.DataFrame:
+    """Load the data-lineage audit log (empty frame if the table is absent)."""
+    try:
+        return pd.read_sql(
+            "SELECT run_id, source_file, sn, source_row, stage, column_name, "
+            "action, old_value, new_value, applied_at "
+            "FROM public.pipeline_transformations ORDER BY id DESC",
+            get_engine(),
+        )
+    except Exception:
+        return pd.DataFrame(
+            columns=["run_id", "source_file", "sn", "source_row", "stage",
+                     "column_name", "action", "old_value", "new_value", "applied_at"]
+        )
+
+
+def parse_epi_week(value) -> "int | None":
+    """Extract the integer epi week from a messy epi_week string.
+
+    Handles "11", "W11", "Week 11", "2024-W14" -> 11/11/11/14.
+    """
+    if value is None:
+        return None
+    s = str(value).strip()
+    if not s:
+        return None
+    m = re.search(r"[Ww]\s*0*(\d{1,2})", s)        # ...W14
+    if not m:
+        m = re.search(r"\b0*(\d{1,2})\b", s)        # bare week number
+    if not m:
+        return None
+    wk = int(m.group(1))
+    return wk if 1 <= wk <= 53 else None
+
+
+def epi_week_counts(df: pd.DataFrame) -> pd.DataFrame:
+    """Cases per epi week as a continuous series from the min to the max
+    observed week (zero-filled), so the curve always extends to max(epi_week)."""
+    if "epi_week" not in df.columns:
+        return pd.DataFrame(columns=["epi_week", "cases"])
+    weeks = df["epi_week"].map(parse_epi_week).dropna().astype(int)
+    if weeks.empty:
+        return pd.DataFrame(columns=["epi_week", "cases"])
+    counts = weeks.value_counts().sort_index()
+    full = range(int(counts.index.min()), int(counts.index.max()) + 1)
+    counts = counts.reindex(full, fill_value=0)
+    return pd.DataFrame({"epi_week": list(counts.index), "cases": counts.values})
+
+
+def epi_week_classification_counts(df: pd.DataFrame) -> pd.DataFrame:
+    """Per-epi-week Confirmed vs Suspected counts (long format), zero-filled to a
+    continuous week range.
+
+    Confirmed = case_classification == 'Confirmed'. Suspected = everything else
+    (i.e. anything not yet confirmed is treated as suspected). The two segments
+    sum to the weekly total.
+    """
+    empty = pd.DataFrame(columns=["epi_week", "Classification", "cases"])
+    if "epi_week" not in df.columns:
+        return empty
+    d = df.copy()
+    d["_wk"] = d["epi_week"].map(parse_epi_week)
+    d = d.dropna(subset=["_wk"])
+    if d.empty:
+        return empty
+    d["_wk"] = d["_wk"].astype(int)
+    confirmed = d.get("case_classification", pd.Series(index=d.index)) == "Confirmed"
+    d["Classification"] = ["Confirmed" if c else "Suspected" for c in confirmed]
+
+    wide = (d.groupby(["_wk", "Classification"]).size()
+            .unstack(fill_value=0))
+    for col in ("Suspected", "Confirmed"):
+        if col not in wide.columns:
+            wide[col] = 0
+    full = range(int(d["_wk"].min()), int(d["_wk"].max()) + 1)
+    wide = wide.reindex(full, fill_value=0)[["Suspected", "Confirmed"]]
+    long = (wide.reset_index(names="epi_week")
+            .melt(id_vars="epi_week", var_name="Classification", value_name="cases"))
+    return long
 
 
 def explode_multivalue(df: pd.DataFrame, column: str) -> pd.DataFrame:

@@ -33,7 +33,8 @@ TARGET_TABLE = "chikungunya_analysis"
 LOG_TABLE = "pipeline_load_log"
 
 # Columns that are never written from source data.
-_NON_SOURCE = {"id", "created_at", "updated_at", "_source_row", "reject_reasons"}
+_NON_SOURCE = {"id", "created_at", "updated_at", "_source_row", "_sn",
+               "reject_reasons", "failed_columns"}
 
 # Pipeline-derived columns: written to the DB, but excluded from the idempotency
 # hash so re-deriving them never changes a row's identity.

@@ -93,7 +93,7 @@ def sanitize_dataframe(df: pd.DataFrame, mapping: ColumnMapping) -> pd.DataFrame
     yn_cols = set(mapping.yes_no_columns)
 
     for col in out.columns:
-        if col == "_source_row":
+        if str(col).startswith("_"):  # meta columns (_source_row, _sn)
             continue
         if col in date_cols:
             out[col] = out[col].map(lambda v: to_iso8601(v))

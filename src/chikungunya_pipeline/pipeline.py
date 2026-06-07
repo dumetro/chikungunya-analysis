@@ -47,6 +47,7 @@ class PipelineRunResult:
     inserted: int = 0
     skipped_duplicate: int = 0
     load_failed: int = 0
+    transformations: int = 0
     archived_to: Optional[str] = None
     summary: dict = field(default_factory=dict)
     messages: list[str] = field(default_factory=list)
@@ -101,8 +102,17 @@ def run_pipeline(
     result.unmapped_headers = ingested.unmapped_headers
     emit(f"      rows={result.ingested_rows}  mapped={len(ingested.mapped_headers)}")
 
+    # Row-level corrections (SN-keyed) applied before sanitising; recorded for lineage.
+    from .lineage import apply_corrections, diff_records
+
+    transformations: list[dict] = []
+    corrected, corr_records = apply_corrections(ingested.df)
+    transformations.extend(corr_records)
+    if corr_records:
+        emit(f"      applied {len(corr_records)} SN-keyed correction(s)")
+
     emit("[2/5] Sanitising ...")
-    clean = sanitize_dataframe(ingested.df, mapping)
+    clean = sanitize_dataframe(corrected, mapping)
 
     emit("[3/5] Normalising against reference + lookup tables ...")
     from .normalize import load_lookup_sets
@@ -139,6 +149,12 @@ def run_pipeline(
             value_patterns=mapping.value_patterns,
             lookup_sets=lookup_sets,
         )
+
+    # Record reference/lookup normalisations (raw -> canonical) for lineage.
+    normalized_cols = (list(mapping.coded_columns) + list(mapping.multivalue_columns)
+                       + list(mapping.lookup_columns))
+    transformations.extend(diff_records(
+        clean, normalized, stage="normalize", action="normalize", columns=normalized_cols))
 
     # Derive the WHO/PAHO case classification from the normalised columns so it
     # is validated and persisted alongside the case.
@@ -179,9 +195,22 @@ def run_pipeline(
         outcome.failed.to_csv(rej, index=False)
         emit(f"      rejects written -> {rej}")
 
+    # Data lineage: always write a sidecar CSV; persist to the audit table on load.
+    from .lineage import records_to_frame, write_transformations
+
+    result.transformations = len(transformations)
+    if transformations:
+        records_to_frame(transformations, run_id=stamp, source_file=src.name).to_csv(
+            rejects_dir / f"transformations_{src.stem}_{stamp}.csv", index=False)
+        emit(f"      recorded {len(transformations)} transformation(s) for lineage")
+
     if dry_run:
         emit("[5/5] Dry-run: skipping database load.")
         return result
+
+    if transformations:
+        written = write_transformations(transformations, run_id=stamp, source_file=src.name)
+        emit(f"      wrote {written} transformation event(s) to pipeline_transformations")
 
     emit(f"[5/5] Loading {outcome.n_passed} row(s) into chikungunya_analysis (mode={mode}) ...")
     from .load import load_dataframe  # imported here so dry-run needs no DB driver

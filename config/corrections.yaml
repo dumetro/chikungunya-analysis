@@ -1,0 +1,23 @@
+# Row-level corrections applied before sanitisation, keyed by source SN.
+# Every action is recorded in the pipeline_transformations audit table.
+#
+# Use these for cross-pollinated / misplaced values (e.g. a symptom string that
+# was entered in the pregnancy column). Add SNs as you discover them — no code
+# change needed.
+#
+# Supported actions per SN (a list, applied in order):
+#   - {action: move,  from: <col>, to: <col>}   # move value from->to (clears 'from';
+#                                                #   appends with "; " if 'to' is non-empty)
+#   - {action: clear, column: <col>}            # set the column to NULL
+#   - {action: set,   column: <col>, value: X}  # set the column to a literal value
+#
+# Example (replace with real SNs from the source file):
+# corrections:
+#   "1234":
+#     - {action: move, from: pregnancy, to: symptoms}
+#   "1290":
+#     - {action: move, from: pregnancy, to: symptoms}
+#   "1305":
+#     - {action: clear, column: gestation_week}
+
+corrections: {}

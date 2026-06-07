@@ -69,10 +69,14 @@ def test_schema_checks_type_length_and_range():
     )
     outcome = validate_dataframe(df, {"conditional_rules": True}, schema=schema)
     failed = outcome.failed.set_index("_source_row")["reject_reasons"].to_dict()
+    cols = outcome.failed.set_index("_source_row")["failed_columns"].to_dict()
     assert set(outcome.passed["_source_row"]) == {2}
-    assert "exceeds max length 50" in failed[3]
-    assert "age is not an integer" in failed[4]
-    assert "date_of_onset_symptoms is not a valid date" in failed[5]
+    # reason names the column and the rule/expectation; failed_columns lists the column
+    assert "dmu_hospitalised_tba_missing: exceeds max length 50" in failed[3]
+    assert "dmu_hospitalised_tba_missing" in cols[3]
+    assert "age: is not an integer" in failed[4] and "age" in cols[4]
+    assert "date_of_onset_symptoms: is not a valid date" in failed[5]
+    assert "date_of_onset_symptoms" in cols[5]
 
 
 def test_validate_splits_pass_fail():

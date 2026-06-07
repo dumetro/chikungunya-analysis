@@ -7,10 +7,17 @@ from __future__ import annotations
 
 from datetime import date
 
+import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from data_access import apply_filters, kpi_summary, load_cases
+from data_access import (
+    apply_filters,
+    epi_week_classification_counts,
+    epi_week_counts,
+    kpi_summary,
+    load_cases,
+)
 from filters import sidebar_filters
 from theme import who_style as who
 
@@ -51,23 +58,78 @@ c5.metric("Case fatality", f"{k['cfr_pct']}%")
 
 st.divider()
 
+# --- Epidemic curve by epi week (full width) -------------------------------
+# Stacked: Confirmed (case_classification == 'Confirmed') + Suspected (everything
+# else). The two segments sum to the weekly total (shown by the line markers).
+who.section("Epidemic curve — suspected vs confirmed by epi week", "Epi curve")
+stack_df = epi_week_classification_counts(fdf)
+week_df = epi_week_counts(fdf)  # weekly totals for the trend line
+if not stack_df.empty:
+    fig = px.bar(
+        stack_df, x="epi_week", y="cases", color="Classification",
+        barmode="stack",
+        category_orders={"Classification": ["Suspected", "Confirmed"]},
+        color_discrete_map={"Suspected": who.WHO_BLUE, "Confirmed": who.WHO_RED},
+        labels={"epi_week": "Epi week", "cases": "Cases"},
+    )
+    # Total trend line with weekly count labels (= top of each stack).
+    fig.add_scatter(
+        x=week_df["epi_week"], y=week_df["cases"],
+        mode="lines+markers+text",
+        text=week_df["cases"],
+        texttemplate="%{text}",
+        textposition="top center",
+        line=dict(color=who.WHO_DARK, width=2),
+        marker=dict(color=who.WHO_DARK, size=7),
+        name="Weekly total",
+        cliponaxis=False,
+    )
+    # Integer week ticks, axis extends to max(epi_week) in the data.
+    fig.update_xaxes(dtick=1, range=[week_df["epi_week"].min() - 0.5,
+                                     week_df["epi_week"].max() + 0.5])
+    st.plotly_chart(who.style_fig(fig, height=440), use_container_width=True)
+    confirmed_total = int(stack_df.loc[stack_df["Classification"] == "Confirmed", "cases"].sum())
+    total = int(stack_df["cases"].sum())
+    st.caption(
+        f"{total:,} total cases ({confirmed_total:,} confirmed, {total - confirmed_total:,} "
+        f"suspected) across epi weeks {int(week_df['epi_week'].min())}–"
+        f"{int(week_df['epi_week'].max())}."
+    )
+else:
+    st.info("No epi week data available for the current filter.")
+
+st.divider()
+
 # --- Epi curve preview -----------------------------------------------------
 left, right = st.columns([2, 1])
 with left:
-    who.section("Epidemic curve (by onset week)", "Time trend")
-    if "date_of_onset_symptoms" in fdf and fdf["date_of_onset_symptoms"].notna().any():
-        weekly = (
-            fdf.dropna(subset=["date_of_onset_symptoms"])
-            .assign(week=lambda d: d["date_of_onset_symptoms"].dt.to_period("W").dt.start_time)
-            .groupby("week")
-            .size()
-            .reset_index(name="cases")
-        )
-        fig = px.bar(weekly, x="week", y="cases", labels={"week": "Onset week", "cases": "Cases"})
-        fig.update_traces(marker_color=who.WHO_BLUE)
-        st.plotly_chart(who.style_fig(fig), use_container_width=True)
+    who.section("Suspected vs confirmed cases by region", "Classification")
+    if {"health_region", "case_classification"} <= set(fdf.columns):
+        sub = fdf.copy()
+        sub["health_region"] = sub["health_region"].fillna("Unknown")
+        # Suspected = all uploaded rows per region; Confirmed = classification == 'Confirmed'.
+        suspected = sub.groupby("health_region").size().rename("Suspected")
+        confirmed = (sub[sub["case_classification"] == "Confirmed"]
+                     .groupby("health_region").size().rename("Confirmed"))
+        agg = pd.concat([suspected, confirmed], axis=1).fillna(0).astype(int)
+        if not agg.empty:
+            order = agg.sort_values("Suspected", ascending=False).index.tolist()
+            long = (agg.reset_index()
+                    .melt(id_vars="health_region", value_vars=["Suspected", "Confirmed"],
+                          var_name="Classification", value_name="cases"))
+            fig = px.bar(
+                long, x="health_region", y="cases", color="Classification",
+                barmode="group",
+                category_orders={"health_region": order,
+                                 "Classification": ["Suspected", "Confirmed"]},
+                color_discrete_map={"Suspected": who.WHO_BLUE, "Confirmed": who.WHO_RED},
+                labels={"health_region": "Health region", "cases": "Cases"},
+            )
+            st.plotly_chart(who.style_fig(fig), use_container_width=True)
+        else:
+            st.info("No cases for the current filter.")
     else:
-        st.info("No onset dates available for the current filter.")
+        st.info("Region or classification data not available.")
 
 with right:
     who.section("Local vs imported", "Transmission")

@@ -87,12 +87,15 @@ def _build_suite(cfg: dict, columns: set[str]) -> gx.ExpectationSuite:
     return suite
 
 
-def _collect_unexpected(result_dict: dict) -> tuple[set, str]:
-    """Return (failed _source_row set, expectation label) from one result."""
+def _collect_unexpected(result_dict: dict) -> tuple[set, list[str], str]:
+    """Return (failed _source_row set, failing column(s), expectation type)."""
     cfg = result_dict.get("expectation_config", {})
     kwargs = cfg.get("kwargs", {})
-    label = cfg.get("type", "expectation")
-    target = kwargs.get("column") or f"{kwargs.get('column_A')}>={kwargs.get('column_B')}"
+    expectation = cfg.get("type", "expectation")
+    if kwargs.get("column"):
+        columns = [kwargs["column"]]
+    else:  # column-pair expectation (e.g. date ordering)
+        columns = [c for c in (kwargs.get("column_A"), kwargs.get("column_B")) if c]
     res = result_dict.get("result", {})
     rows: set = set()
     for item in res.get("unexpected_index_list") or []:
@@ -101,7 +104,7 @@ def _collect_unexpected(result_dict: dict) -> tuple[set, str]:
                 rows.add(item["_source_row"])
         else:
             rows.add(item)
-    return rows, f"{label}[{target}]"
+    return rows, columns, expectation
 
 
 def _is_int_like(v: Any) -> bool:
@@ -125,7 +128,8 @@ def _is_date_like(v: Any) -> bool:
 
 def _schema_rejects(df: pd.DataFrame, schema: dict[str, dict], flag) -> None:
     """Reject rows whose values violate the target table's column attributes:
-    nullability, type (int / date / bool), varchar length and integer range."""
+    nullability, type (int / date / bool), varchar length and integer range.
+    flag(mask, columns, rule)."""
     for col, spec in schema.items():
         if col not in df.columns:
             continue
@@ -135,55 +139,54 @@ def _schema_rejects(df: pd.DataFrame, schema: dict[str, dict], flag) -> None:
 
         if not spec.get("nullable", True):
             flag(s.map(lambda v: v is None or (isinstance(v, float) and pd.isna(v))),
-                 f"{col} must not be null")
+                 [col], "must not be null")
 
         if kind == "str" and length:
             flag(s.map(lambda v: v is not None and len(str(v)) > length),
-                 f"{col} exceeds max length {length}")
+                 [col], f"exceeds max length {length}")
         elif kind == "int":
             flag(s.map(lambda v: v is not None and not _is_int_like(v)),
-                 f"{col} is not an integer")
+                 [col], "is not an integer")
             mn, mx = spec.get("min"), spec.get("max")
             if mn is not None and mx is not None:
                 flag(
                     s.map(lambda v: v is not None and _is_int_like(v)
                           and not (mn <= int(float(v)) <= mx)),
-                    f"{col} outside column range [{mn}, {mx}]",
+                    [col], f"outside column range [{mn}, {mx}]",
                 )
         elif kind == "date":
             flag(s.map(lambda v: v is not None and not _is_date_like(v)),
-                 f"{col} is not a valid date")
+                 [col], "is not a valid date")
         elif kind == "bool":
             flag(s.map(lambda v: v is not None and not isinstance(v, bool)),
-                 f"{col} is not boolean")
+                 [col], "is not boolean")
 
 
 def _conditional_rejects(
     df: pd.DataFrame,
     max_lengths: dict[str, int] | None = None,
     schema: dict[str, dict] | None = None,
-) -> dict[Any, list[str]]:
+) -> dict[Any, list[tuple[list[str], str]]]:
     """Pandas checks: DB CHECK constraints + target-schema column attributes.
 
-    Keyed by _source_row. ``schema`` ({column: {kind, length, nullable, min,
-    max}}, from load.target_schema) validates source values against the target
-    table's type / nullability / length / range, catching mismatches before
-    they raise a DB error on load. ``max_lengths`` is a lightweight subset
-    (length only) kept for callers that only have that.
+    Returns {_source_row: [(columns, rule), ...]} so the caller can name the
+    failing column(s) in the reject reason. ``schema`` (from load.target_schema)
+    validates type / nullability / length / range; ``max_lengths`` is a
+    length-only subset kept for lightweight callers.
     """
-    reasons: dict[Any, list[str]] = {}
+    records: dict[Any, list[tuple[list[str], str]]] = {}
 
-    def flag(mask: pd.Series, reason: str):
+    def flag(mask: pd.Series, columns: list[str], rule: str):
         for sr in df.loc[mask, "_source_row"]:
-            reasons.setdefault(sr, []).append(reason)
+            records.setdefault(sr, []).append((columns, rule))
 
     if {"gestation_week", "pregnancy"} <= set(df.columns):
         bad = df["gestation_week"].notna() & (df["pregnancy"] != "Yes")
-        flag(bad, "gestation_week set but pregnancy != Yes")
+        flag(bad, ["gestation_week", "pregnancy"], "gestation_week set but pregnancy != Yes")
 
     if {"if_admitted", "date_of_admission"} <= set(df.columns):
         bad = (df["if_admitted"] == "Yes") & df["date_of_admission"].isna()
-        flag(bad, "admitted=Yes but date_of_admission missing")
+        flag(bad, ["if_admitted", "date_of_admission"], "admitted=Yes but date_of_admission missing")
 
     if schema:
         _schema_rejects(df, schema, flag)
@@ -191,9 +194,9 @@ def _conditional_rejects(
     for col, limit in (max_lengths or {}).items():
         if col in df.columns:
             lengths = df[col].map(lambda v: len(str(v)) if v is not None else 0)
-            flag(lengths > limit, f"{col} exceeds max length {limit}")
+            flag(lengths > limit, [col], f"exceeds max length {limit}")
 
-    return reasons
+    return records
 
 
 def validate_dataframe(
@@ -236,29 +239,45 @@ def validate_dataframe(
     batch = batch_def.get_batch(batch_parameters={"dataframe": df})
     gx_result = batch.validate(suite, result_format=_RESULT_FORMAT)
 
-    reasons: dict[Any, list[str]] = {}
+    # Per-source-row records: (failing columns, rule/expectation). The reject
+    # reason names the actual column(s) alongside the failed expectation.
+    records: dict[Any, list[tuple[list[str], str]]] = {}
     expectation_summaries = []
     for r in gx_result.results:
         rd = r.to_json_dict() if hasattr(r, "to_json_dict") else dict(r)
         success = rd.get("success", True)
-        bad_rows, label = _collect_unexpected(rd)
+        bad_rows, cols, expectation = _collect_unexpected(rd)
+        label = f"{expectation}[{'>='.join(cols) if len(cols) > 1 else (cols[0] if cols else '?')}]"
         expectation_summaries.append(
             {"expectation": label, "success": success, "n_unexpected": len(bad_rows)}
         )
         for sr in bad_rows:
-            reasons.setdefault(sr, []).append(label)
+            records.setdefault(sr, []).append((cols, expectation))
 
     # --- Conditional pandas checks + target-schema attribute checks ---
     if cfg.get("conditional_rules", True):
-        for sr, why in _conditional_rejects(df, max_lengths, schema).items():
-            reasons.setdefault(sr, []).extend(why)
+        for sr, recs in _conditional_rejects(df, max_lengths, schema).items():
+            records.setdefault(sr, []).extend(recs)
 
-    failed_rows = set(reasons)
+    def _reason_str(recs: list[tuple[list[str], str]]) -> str:
+        # "column: rule" per violation (joins multi-column rules with '/').
+        return "; ".join(
+            f"{'/'.join(cols)}: {rule}" if cols else rule for cols, rule in recs
+        )
+
+    def _failed_cols(recs: list[tuple[list[str], str]]) -> str:
+        seen: list[str] = []
+        for cols, _ in recs:
+            for c in cols:
+                if c not in seen:
+                    seen.append(c)
+        return ", ".join(seen)
+
+    failed_rows = set(records)
     failed_mask = df["_source_row"].isin(failed_rows)
     failed = df.loc[failed_mask].copy()
-    failed["reject_reasons"] = failed["_source_row"].map(
-        lambda sr: "; ".join(reasons.get(sr, []))
-    )
+    failed["failed_columns"] = failed["_source_row"].map(lambda sr: _failed_cols(records.get(sr, [])))
+    failed["reject_reasons"] = failed["_source_row"].map(lambda sr: _reason_str(records.get(sr, [])))
     passed = df.loc[~failed_mask].copy()
 
     summary = {
