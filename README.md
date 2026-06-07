@@ -35,7 +35,8 @@ make test                    # unit tests
 
 | Stage | Module | What it does |
 |-------|--------|--------------|
-| Ingest | `ingest.py` | Reads the Excel sheet, maps headers → DB columns via `config/column_mapping.yaml`, keeps `_source_row` for traceability. |
+| Ingest | `ingest.py` | Reads the Excel sheet, maps headers → DB columns via `config/column_mapping.yaml`, keeps `_source_row` and the source `SN` (`_sn`) for traceability. |
+| Correct | `lineage.py` | Applies SN-keyed corrections from `config/corrections.yaml` (move/clear/set) for cross-pollinated values (e.g. a symptom string in the `pregnancy` column). Each change is logged for lineage. |
 | Sanitize | `sanitize.py` | Trims/cases strings, canonical Yes/No & gender, numeric coercion, **all dates → ISO 8601** via `dates.to_iso8601()`. |
 | Normalize | `normalize.py` | Maps `occupation`/`nationality`/`symptoms`/`comorbidities_pmh` to canonical reference values via the `*_raw_map` + reference tables. **Lookup-coded columns** (`gender`, `age_group`, `pcr_result`, `outcome`, `local_or_imported`, `active_passive`) are normalised against `analysis_lookups` by: case-insensitive exact match → `value_overrides` synonyms → `value_patterns` regex → else kept raw and logged with fuzzy suggestions. Nothing is dropped silently. |
 | Validate | `validate.py` | Great Expectations **core** suite mirroring the DB CHECK constraints (ranges, allowed sets, date ordering, conditional rules). Splits rows into passed / rejected. |
@@ -77,6 +78,17 @@ PCR, outcomes) · **Geographic** (region/locality, local vs imported) ·
 - `data/rejects/unmapped_<col>_*.csv` — source values not in the reference maps,
   with `rapidfuzz` suggestions. Extend the `*_raw_map` tables, then re-run.
 - `data/archive/` — successfully processed source files.
+- `data/rejects/transformations_*.csv` — per-run data-lineage events.
+
+## Data lineage
+
+Every correction and reference/lookup normalisation (raw → canonical) is recorded
+as an append-only event in the **`pipeline_transformations`** audit table
+(`db_scripts/pipeline_transformations.sql`; the pipeline also ensures it at load
+time), keyed by source `SN`: `(run_id, sn, source_row, stage, column_name, action,
+old_value, new_value, applied_at)`. The **Data Lineage** dashboard page reports it
+(by column, by action, per-SN trace, CSV export). Edit `config/corrections.yaml`
+to add SN-keyed fixes; whitespace/case cleanups (the sanitise stage) are not logged.
 
 ## Project layout
 
