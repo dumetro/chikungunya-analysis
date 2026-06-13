@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import sys
 from pathlib import Path
@@ -32,20 +33,61 @@ def _latest(glob: str) -> "Path | None":
     return files[0] if files else None
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _csv_bytes(df: pd.DataFrame) -> bytes:
+    return df.to_csv(index=False).encode("utf-8")
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _xlsx_bytes(df: pd.DataFrame) -> bytes:
+    out = df.copy()
+    # Excel can't store timezone-aware datetimes (e.g. created_at/updated_at).
+    for col in out.select_dtypes(include=["datetimetz"]).columns:
+        out[col] = out[col].dt.tz_localize(None)
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as xl:
+        out.to_excel(xl, index=False, sheet_name="cases")
+    return buf.getvalue()
+
+
+@st.dialog("Upload a data file")
+def _upload_dialog():
+    incoming = settings.resolve(settings.incoming_dir)
+    st.write(f"The file is saved to `{incoming}` and queued for cleaning & validation.")
+    up = st.file_uploader("Excel workbook", type=["xlsx", "xls"])
+    if up is not None:
+        st.caption(f"**{up.name}** · {up.size / 1024:,.0f} KB")
+        dest = incoming / up.name
+        if dest.exists():
+            st.warning("A file with this name already exists and will be overwritten.")
+        if st.button("Save & set as source", type="primary", use_container_width=True):
+            incoming.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(up.getbuffer())
+            st.session_state["uploaded_source"] = str(dest)
+            st.success(f"Saved → {dest}")
+            st.rerun()
+
+
 # --- Manual ingestion trigger ---------------------------------------------
 st.subheader("Run data ingestion")
-src = default_source()
-st.caption(f"Source workbook: `{src}`" if src else "No source workbook configured.")
+# Active source: an uploaded file (this session) takes precedence over the default.
+_default = default_source()
+src = st.session_state.get("uploaded_source") or (str(_default) if _default else None)
+st.caption(f"Source workbook: `{src}`" if src else "No source workbook configured — upload one.")
+
+up_col, _ = st.columns([1, 3])
+if up_col.button("📤 Upload data file", use_container_width=True):
+    _upload_dialog()
 
 # Centre the two action buttons using spacer columns.
 _, col_a, col_b, _ = st.columns([1, 1.5, 1.5, 1])
-dry = col_a.button("Validate only (dry-run)", use_container_width=True)
-live = col_b.button("Ingest & load to DB", type="primary", use_container_width=True)
+dry = col_a.button("Validate only (dry-run)", use_container_width=True, disabled=not src)
+live = col_b.button("Ingest & load to DB", type="primary", use_container_width=True, disabled=not src)
 
 if dry or live:
     with st.status("Running pipeline …", expanded=True) as status:
         try:
-            res = run_pipeline(dry_run=dry, log=lambda m: st.write(m))
+            res = run_pipeline(file=src, dry_run=dry, log=lambda m: st.write(m))
         except Exception as exc:
             status.update(label="Pipeline failed", state="error")
             st.error(str(exc))
@@ -70,6 +112,34 @@ if dry or live:
                         "quarantined to a load_errors CSV (see Rejected rows below)."
                     )
                 load_cases.clear()  # refresh dashboard data on next view
+                # The processed file was archived out of incoming; drop the stale path.
+                st.session_state.pop("uploaded_source", None)
+
+st.divider()
+
+# --- Download the cleaned dataset (current chikungunya_analysis contents) ---
+st.subheader("Cleaned dataset")
+try:
+    clean_df = load_cases()
+except Exception as exc:  # DB unreachable etc.
+    clean_df = None
+    st.caption(f"Cleaned data unavailable: {exc.__class__.__name__}")
+if clean_df is not None and not clean_df.empty:
+    st.caption(f"{len(clean_df):,} cleaned rows currently in chikungunya_analysis.")
+    d1, d2, _ = st.columns([1.2, 1.2, 2])
+    d1.download_button(
+        "⬇️ Download CSV", _csv_bytes(clean_df),
+        file_name="chikungunya_analysis_clean.csv", mime="text/csv",
+        use_container_width=True,
+    )
+    d2.download_button(
+        "⬇️ Download Excel", _xlsx_bytes(clean_df),
+        file_name="chikungunya_analysis_clean.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+    )
+elif clean_df is not None:
+    st.caption("No rows in chikungunya_analysis yet — load a file above.")
 
 st.divider()
 
@@ -119,10 +189,10 @@ with st.container(key="dq_content"):
         st.success("No database load errors in the latest run.")
 
     st.subheader("Unmapped reference values (need review)")
-    unmapped_files = sorted(rejects_dir.glob("unmapped_*.csv"),
-                            key=lambda p: p.stat().st_mtime, reverse=True)
+    # Cleared and rewritten on every pipeline run, so this reflects the latest run only.
+    unmapped_files = sorted(rejects_dir.glob("unmapped_*.csv"), key=lambda p: p.name)
     if unmapped_files:
-        for f in unmapped_files[:6]:
+        for f in unmapped_files:
             with st.expander(f.name):
                 st.dataframe(pd.read_csv(f), use_container_width=True, hide_index=True)
     else:

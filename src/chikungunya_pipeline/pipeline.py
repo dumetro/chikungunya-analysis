@@ -81,6 +81,14 @@ def run_pipeline(
     rejects_dir = settings.resolve(settings.rejects_dir)
     rejects_dir.mkdir(parents=True, exist_ok=True)
 
+    # Clear the previous run's unmapped-value files so the dashboard's
+    # "Unmapped reference values" section reflects only this run.
+    for old in rejects_dir.glob("unmapped_*.csv"):
+        try:
+            old.unlink()
+        except OSError:
+            pass
+
     src = Path(file) if file else default_source()
     if src is None or not Path(src).exists():
         raise FileNotFoundError(
@@ -156,14 +164,37 @@ def run_pipeline(
     transformations.extend(diff_records(
         clean, normalized, stage="normalize", action="normalize", columns=normalized_cols))
 
-    # Derive the WHO/PAHO case classification from the normalised columns so it
-    # is validated and persisted alongside the case.
+    # Ensure age_group fits the canonical AGE_GROUP values; derive from age otherwise.
     try:
-        from .classify import classify_cases
+        from .classify import fit_age_groups
 
-        normalized["case_classification"] = classify_cases(normalized)
-        emit("      derived case_classification "
-             f"({normalized['case_classification'].value_counts().to_dict()})")
+        ag_category = mapping.lookup_columns.get("age_group", "AGE_GROUP")
+        normalized, ag_records = fit_age_groups(normalized, lookup_sets.allowed(ag_category))
+        transformations.extend(ag_records)
+        if ag_records:
+            emit(f"      derived age_group from age for {len(ag_records)} row(s)")
+    except Exception as exc:
+        emit(f"      [skip] age_group fit ({exc.__class__.__name__})")
+
+    # Derive the WHO/PAHO case classification from the normalised columns so it
+    # is validated and persisted alongside the case. Unclassified rows get a
+    # logged reason in the lineage table.
+    try:
+        from .classify import classify_cases_with_reasons
+
+        labels, reasons = classify_cases_with_reasons(normalized)
+        normalized["case_classification"] = labels
+        emit(f"      derived case_classification ({labels.value_counts().to_dict()})")
+        for i in normalized.index[labels == "Unclassified"]:
+            transformations.append({
+                "sn": str(normalized.at[i, "_sn"]) if "_sn" in normalized.columns else None,
+                "source_row": int(normalized.at[i, "_source_row"]) if "_source_row" in normalized.columns else None,
+                "stage": "classify",
+                "column_name": "case_classification",
+                "action": "unclassified",
+                "old_value": None,
+                "new_value": reasons.at[i],
+            })
     except Exception as exc:
         emit(f"      [skip] case classification ({exc.__class__.__name__})")
 

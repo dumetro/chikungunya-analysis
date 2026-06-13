@@ -103,6 +103,8 @@ value_patterns:
   pcr_result:
     "\\bpos": "Positive"        # POS, POSITVE, "POS ON 11.5.2026", "PCR POS ..."
     "\\bneg": "Negative"
+    "^p$": "Positive"           # a lone "P" means Positive
+    "^y(es)?$": "Positive"      # "Y" / "Yes" mean Positive
     "pend|await": "Pending"
   age_group:
     "60.*above|>=?\\s*60|60\\s*\\+": "60-150"

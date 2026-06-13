@@ -51,7 +51,7 @@ def test_sanitize_dataframe_clears_gestation_when_not_pregnant():
             "pregnancy": ["No", "Yes"],
             "gestation_week": ["20", "30"],
             "gender": ["m", "F"],
-            "date_of_onset_symptoms": ["03/04/2024", ""],
+            "date_of_onset_symptoms": ["03/04/2026", ""],
         }
     )
     out = sanitize_dataframe(df, mapping)
@@ -59,5 +59,6 @@ def test_sanitize_dataframe_clears_gestation_when_not_pregnant():
     assert out.loc[1, "gestation_week"] == 30
     assert out.loc[0, "gender"] == "Male"
     assert out.loc[1, "gender"] == "Female"
-    assert out.loc[0, "date_of_onset_symptoms"] == dt.date(2024, 4, 3)
+    # 2026 regardless of whether DATA_YEAR forcing is enabled
+    assert out.loc[0, "date_of_onset_symptoms"] == dt.date(2026, 4, 3)
     assert out.loc[1, "date_of_onset_symptoms"] is None

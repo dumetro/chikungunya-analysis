@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -50,6 +51,8 @@ class Settings(BaseSettings):
     )
 
     date_dayfirst: bool = Field(default=True, alias="DATE_DAYFIRST")
+    # Force the year of every parsed date (data is known to be one year). None = off.
+    data_year: Optional[int] = Field(default=None, alias="DATA_YEAR")
     load_mode: str = Field(default="append", alias="LOAD_MODE")
 
     def resolve(self, path: Path) -> Path:

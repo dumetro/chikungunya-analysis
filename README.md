@@ -60,6 +60,19 @@ returning a `datetime.date` (ISO `YYYY-MM-DD`) or `None`. Day-first by default
   new value, add it to the table (see `db_scripts/seed_analysis_lookups_extra.sql`)
   or extend `value_overrides` / `value_patterns`. Offline (no DB) the pipeline
   falls back to `data/incoming/analysis_lookups.csv`.
+- **Reference entity tables** (`symptoms`, `comorbidities`, `occupations`,
+  `nationalities`) hold the canonical names. `symptoms` also carries optional
+  `category` / `description` metadata — see
+  `db_scripts/extend_symptoms_cdc_who.sql`, which adds those columns, seeds the
+  CDC/WHO chikungunya symptom set, and backfills clinical groupings
+  (Primary / Secondary / Severe / Other). To teach the pipeline a new dirty
+  value, add a `(raw_value, <entity>_id)` row to the matching `*_raw_map` table;
+  a multi-symptom raw string gets **one row per symptom** it contains (see
+  `db_scripts/seed_symptom_raw_map.sql`). Separators in raw strings are commas,
+  slashes and the word `AND` — except slash pairs that are themselves canonical
+  names (e.g. `Arthralgia / Joint Pain`, `Myalgia / Body Ache`). The
+  `fn_map_symptom(raw, symptom_name)` and `fn_map_comorbidity(...)` helper
+  functions insert these rows by canonical name, so you needn't look up ids.
 - **`config/expectations.yaml`** — validation ranges, allowed value sets, date-ordering
   pairs. *Keep `Yes`/`No` quoted (unquoted they are YAML booleans).*
 
@@ -76,7 +89,10 @@ PCR, outcomes) · **Geographic** (region/locality, local vs imported) ·
 - `data/rejects/validation_summary_*.json` — per-run GX summary (feeds Data Quality page).
 - `data/rejects/rejects_*.csv` — rows that failed validation, with reasons.
 - `data/rejects/unmapped_<col>_*.csv` — source values not in the reference maps,
-  with `rapidfuzz` suggestions. Extend the `*_raw_map` tables, then re-run.
+  with single-best `rapidfuzz` suggestions (a triage hint, not a decomposition —
+  for a multi-symptom cell it only names the nearest canonical value). Add the
+  verified `*_raw_map` rows (e.g. via `db_scripts/seed_symptom_raw_map.sql` or the
+  `fn_map_*` helpers), then re-run.
 - `data/archive/` — successfully processed source files.
 - `data/rejects/transformations_*.csv` — per-run data-lineage events.
 

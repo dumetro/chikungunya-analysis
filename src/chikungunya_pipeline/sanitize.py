@@ -11,6 +11,7 @@ from typing import Optional
 
 import pandas as pd
 
+from .config import get_settings
 from .dates import to_iso8601
 from .mapping_config import ColumnMapping
 
@@ -92,11 +93,16 @@ def sanitize_dataframe(df: pd.DataFrame, mapping: ColumnMapping) -> pd.DataFrame
     int_cols = set(mapping.integer_columns)
     yn_cols = set(mapping.yes_no_columns)
 
+    # Date parsing options from settings (day-first, and a forced data year).
+    settings = get_settings()
+    dayfirst, assume_year = settings.date_dayfirst, settings.data_year
+
     for col in out.columns:
         if str(col).startswith("_"):  # meta columns (_source_row, _sn)
             continue
         if col in date_cols:
-            out[col] = out[col].map(lambda v: to_iso8601(v))
+            out[col] = out[col].map(
+                lambda v: to_iso8601(v, dayfirst=dayfirst, assume_year=assume_year))
         elif col == "age":
             out[col] = out[col].map(lambda v: clean_int(v, lo=0, hi=120))
         elif col == "gestation_week":
