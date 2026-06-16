@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 from data_access import apply_filters, explode_multivalue, load_cases
@@ -94,3 +95,82 @@ with c4:
         fig = px.bar(out, x="outcome", y="cases")
         fig.update_traces(marker_color=who.WHO_GREEN)
         st.plotly_chart(who.style_fig(fig, height=380), use_container_width=True)
+
+# --- Transmission chain analysis ------------------------------------------
+st.divider()
+who.section("Transmission chain analysis",
+            "Nationality → health region → local/imported")
+
+CHAIN = ["nationality", "health_region", "local_or_imported"]
+TOP_NATIONALITIES = 10  # collapse the long tail so the diagram stays readable
+
+if set(CHAIN) <= set(fdf.columns) and not fdf.empty:
+    flow = fdf[CHAIN].copy()
+    for col in CHAIN:
+        flow[col] = (flow[col].fillna("Unknown").astype(str)
+                     .str.strip().replace("", "Unknown"))
+    # Keep the top nationalities; bucket the rest as "Other".
+    top = flow["nationality"].value_counts().head(TOP_NATIONALITIES).index
+    flow["nationality"] = flow["nationality"].where(
+        flow["nationality"].isin(top), "Other")
+
+    # One distinct colour per health region; each region's incoming
+    # (nationality→region) and outgoing (region→local/imported) bands share it.
+    regions = list(flow["health_region"].drop_duplicates().sort_values())
+    region_color = {r: who.CATEGORICAL[i % len(who.CATEGORICAL)]
+                    for i, r in enumerate(regions)}
+
+    def _rgba(hex_color: str, alpha: float) -> str:
+        h = hex_color.lstrip("#")
+        r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+        return f"rgba({r},{g},{b},{alpha})"
+
+    # Build a node index per layer so identical labels in different layers
+    # (e.g. a region that shares a name with a nationality) stay distinct.
+    # Nationality and region labels are bolded (local/imported left plain).
+    labels: list[str] = []
+    node_id: dict[tuple[int, str], int] = {}
+    for layer, col in enumerate(CHAIN):
+        for val in flow[col].drop_duplicates().sort_values():
+            node_id[(layer, val)] = len(labels)
+            labels.append(f"<b>{val}</b>" if layer < 2 else val)
+
+    def _node_color(layer: int, val: str) -> str:
+        if layer == 0:
+            return who.WHO_BLUE
+        if layer == 1:
+            return region_color[val]
+        return {"Local": who.WHO_GREEN, "Imported": who.WHO_AMBER}.get(
+            val, who.WHO_GREY)
+
+    node_colors = [_node_color(layer, val) for (layer, val) in node_id]
+
+    src, tgt, val, link_colors = [], [], [], []
+    for layer in range(len(CHAIN) - 1):
+        c_src, c_tgt = CHAIN[layer], CHAIN[layer + 1]
+        grp = flow.groupby([c_src, c_tgt]).size().reset_index(name="n")
+        for _, row in grp.iterrows():
+            src.append(node_id[(layer, row[c_src])])
+            tgt.append(node_id[(layer + 1, row[c_tgt])])
+            val.append(int(row["n"]))
+            # Colour the band by the region it touches (target on the way in,
+            # source on the way out) so each region's flow is traceable.
+            region = row[c_tgt] if layer == 0 else row[c_src]
+            link_colors.append(_rgba(region_color[region], 0.45))
+
+    sankey = go.Figure(go.Sankey(
+        arrangement="snap",
+        textfont=dict(color="black", size=13),
+        node=dict(label=labels, color=node_colors, pad=16, thickness=16,
+                  line=dict(color="white", width=0.5)),
+        link=dict(source=src, target=tgt, value=val, color=link_colors),
+    ))
+    st.plotly_chart(who.style_fig(sankey, height=520), use_container_width=True)
+    st.caption(
+        f"Flow of {len(flow):,} filtered cases from nationality through health "
+        f"region to local/imported classification. Nationalities beyond the top "
+        f"{TOP_NATIONALITIES} are grouped as “Other”; missing values shown as "
+        f"“Unknown”.")
+else:
+    st.info("Transmission chain needs the nationality, health_region and "
+            "local_or_imported columns — not available for the current filter.")
