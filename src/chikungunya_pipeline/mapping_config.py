@@ -35,6 +35,23 @@ class ColumnMapping:
         return self.columns.get(_norm_header(excel_header))
 
 
+def source_headers(path: Path | None = None) -> dict[str, str]:
+    """Reverse of the column map: ``DB column -> source header`` (original casing
+    from the YAML; first header wins if several map to one column).
+
+    Used to export data back into the spreadsheet layout the pipeline ingests,
+    so a corrected file can be re-imported.
+    """
+    settings = get_settings()
+    path = settings.resolve(path or settings.column_mapping_path)
+    with open(path, "r", encoding="utf-8") as fh:
+        raw = yaml.safe_load(fh) or {}
+    rev: dict[str, str] = {}
+    for header, db_col in (raw.get("columns") or {}).items():
+        rev.setdefault(db_col, header)  # first source header wins
+    return rev
+
+
 def load_mapping(path: Path | None = None) -> ColumnMapping:
     """Load and parse the column-mapping YAML."""
     settings = get_settings()

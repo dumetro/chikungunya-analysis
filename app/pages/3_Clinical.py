@@ -10,6 +10,10 @@ from data_access import apply_filters, explode_multivalue, load_cases
 from filters import sidebar_filters
 from theme import who_style as who
 
+# data_access put src/ on the path; reuse the pipeline's standardisation so the
+# chart matches what the pipeline writes to the DB (single source of truth).
+from chikungunya_pipeline.sanitize import DISPOSITION_COLUMN, standardize_disposition
+
 st.set_page_config(page_title="Clinical", page_icon="🩺", layout="wide")
 who.apply_theme()
 who.top_nav(active="Clinical")
@@ -42,6 +46,13 @@ if "case_classification" in fdf.columns:
     st.plotly_chart(who.style_fig(fig, height=340), use_container_width=True)
     st.caption("Derived per row from PCR result, epi-linkage and clinical symptoms "
                "(see config/case_definitions.yaml).")
+    who.notes(
+        "Case counts by WHO/PAHO surveillance classification, with headline KPIs.",
+        "Each row is classified from PCR result + epi-linkage + clinical symptoms "
+        "per `config/case_definitions.yaml`, so it depends on those source fields "
+        "and on symptom/PCR normalisation. Pending PCR results and unmapped "
+        "symptoms inflate 'Unclassified' (see the breakdown). Changing the case "
+        "definition means editing that config and re-running the pipeline.")
 
     # Why are rows unclassified? Logged reasons (also recorded in the lineage table).
     n_unc = int(kpi.get("Unclassified", 0))
@@ -65,6 +76,13 @@ with c1:
         fig.update_traces(marker_color=who.WHO_BLUE)
         fig.update_layout(yaxis=dict(autorange="reversed"))
         st.plotly_chart(who.style_fig(fig), use_container_width=True)
+        who.notes(
+            "The 15 most frequently reported symptoms across cases.",
+            "Multi-symptom free-text cells are split and mapped to canonical "
+            "symptoms via `symptom_raw_map`; strings not yet mapped are excluded "
+            "and listed in the unmapped-symptoms report. Add mappings (see "
+            "`db_scripts/seed_symptom_raw_map.sql` / `fn_map_symptom`) and re-run "
+            "so new variants are decomposed and counted.")
     else:
         st.info("No symptom data for current filter.")
 with c2:
@@ -75,6 +93,11 @@ with c2:
         fig.update_traces(marker_color=who.WHO_RED)
         fig.update_layout(yaxis=dict(autorange="reversed"))
         st.plotly_chart(who.style_fig(fig), use_container_width=True)
+        who.notes(
+            "The 15 most frequent comorbidities / past medical history entries.",
+            "Same decomposition as symptoms, via `comorbidity_raw_map`; values "
+            "not yet mapped are excluded until added. Extend the raw map from the "
+            "unmapped-values report and re-run the pipeline.")
     else:
         st.info("No comorbidity data for current filter.")
 
@@ -87,6 +110,12 @@ with c3:
         pcr.columns = ["pcr_result", "cases"]
         fig = px.pie(pcr, names="pcr_result", values="cases", hole=0.45)
         st.plotly_chart(who.style_fig(fig, height=380), use_container_width=True)
+        who.notes(
+            "Distribution of PCR results (blank shown as 'Not tested').",
+            "`pcr_result` is normalised to canonical values (Positive / Negative / "
+            "…) via the lookup tables; new spellings need a `value_overrides` / "
+            "`value_patterns` entry or an `analysis_lookups` value, else they log "
+            "as unmapped. PCR also drives the Confirmed classification.")
 with c4:
     st.subheader("Outcome")
     if "outcome" in fdf:
@@ -95,6 +124,49 @@ with c4:
         fig = px.bar(out, x="outcome", y="cases")
         fig.update_traces(marker_color=who.WHO_GREEN)
         st.plotly_chart(who.style_fig(fig, height=380), use_container_width=True)
+        who.notes(
+            "Distribution of recorded case outcomes (blank shown as 'Unknown').",
+            "`outcome` is normalised against the `outcome` lookup category; "
+            "unrecognised values stay raw and log as unmapped until added to "
+            "`analysis_lookups` or the override/pattern config.")
+
+# --- Case disposition (DMU / Hospitalised / TBA / Missing) -----------------
+st.divider()
+who.section("Case disposition", "DMU / Hospitalised / TBA / Missing")
+if DISPOSITION_COLUMN in fdf.columns:
+    DISP_ORDER = ["HOSPITALISED", "DMU", "PERSONAL ISOLATION", "DISCHARGED",
+                  "MISSING", "TBA"]
+    DISP_LABEL = {"HOSPITALISED": "Hospitalised", "DMU": "DMU",
+                  "PERSONAL ISOLATION": "Personal Isolation",
+                  "DISCHARGED": "Discharged", "MISSING": "Missing", "TBA": "TBA"}
+    DISP_COLOR = {"Hospitalised": who.WHO_RED, "DMU": who.WHO_TEAL,
+                  "Personal Isolation": who.WHO_BLUE, "Discharged": who.WHO_GREEN,
+                  "Missing": who.WHO_GREY, "TBA": who.WHO_AMBER}
+    # Standardise raw values the same way the pipeline does (so the chart is
+    # correct even before the next pipeline reload).
+    disp = fdf[DISPOSITION_COLUMN].map(standardize_disposition)
+    counts = (disp.value_counts().reindex(DISP_ORDER, fill_value=0)
+              .rename_axis("disposition").reset_index(name="cases"))
+    counts["disposition"] = counts["disposition"].map(DISP_LABEL)
+    fig = px.bar(counts, x="disposition", y="cases", color="disposition",
+                 color_discrete_map=DISP_COLOR,
+                 labels={"disposition": "Disposition", "cases": "Cases"})
+    fig.update_layout(showlegend=False)
+    st.plotly_chart(who.style_fig(fig, height=380), use_container_width=True)
+    st.caption(
+        "Disposition standardised from the free-text source field "
+        "(blank/unmatched → TBA). Hospitalised includes admitted / ward / DAMA; "
+        "home isolation includes self-isolation; missing includes unreachable.")
+    who.notes(
+        "Case disposition standardised into six categories (Hospitalised, DMU, "
+        "Personal Isolation, Discharged, Missing, TBA) from the messy source field.",
+        "Standardisation uses keyword rules in "
+        "`standardize_disposition` (`sanitize.py`) — case-insensitive substring "
+        "matching, first match wins. New free-text phrasings that contain none of "
+        "the keywords fall to **TBA**; when the TBA bucket grows, review those raw "
+        "values and add keywords/categories to the rule, then re-run the pipeline.")
+else:
+    st.info("Disposition field not available for the current filter.")
 
 # --- Transmission chain analysis ------------------------------------------
 st.divider()
@@ -171,6 +243,13 @@ if set(CHAIN) <= set(fdf.columns) and not fdf.empty:
         f"region to local/imported classification. Nationalities beyond the top "
         f"{TOP_NATIONALITIES} are grouped as “Other”; missing values shown as "
         f"“Unknown”.")
+    who.notes(
+        "Flow of cases across three tiers — nationality → health region → "
+        "local/imported — to read transmission pathways at a glance.",
+        "Needs `nationality`, `health_region` and `local_or_imported` populated; "
+        "blanks render as 'Unknown'. The local/imported tier is only meaningful "
+        "once imported cases are actually recorded (currently almost all 'Local'). "
+        "Health-region labels here are the raw 'Region N' values, not districts.")
 else:
     st.info("Transmission chain needs the nationality, health_region and "
             "local_or_imported columns — not available for the current filter.")

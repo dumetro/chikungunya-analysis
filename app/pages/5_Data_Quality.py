@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 
 _SRC = Path(__file__).resolve().parents[2] / "src"
@@ -15,6 +16,7 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from chikungunya_pipeline.config import get_settings  # noqa: E402
+from chikungunya_pipeline.mapping_config import source_headers  # noqa: E402
 from chikungunya_pipeline.pipeline import default_source, run_pipeline  # noqa: E402
 from theme import who_style as who  # noqa: E402
 from data_access import load_cases  # noqa: E402
@@ -48,6 +50,23 @@ def _xlsx_bytes(df: pd.DataFrame) -> bytes:
     with pd.ExcelWriter(buf, engine="openpyxl") as xl:
         out.to_excel(xl, index=False, sheet_name="cases")
     return buf.getvalue()
+
+
+_REASON_COLS = ["failed_columns", "reject_reasons"]
+
+
+def _rejects_source_xlsx(rdf: pd.DataFrame) -> bytes:
+    """Reshape the rejects table back into the source spreadsheet layout (original
+    headers) so it can be corrected and re-imported. Keeps the reason columns at
+    the end so the file can be filtered by rejection reason."""
+    headers = source_headers()  # db col -> original source header (mapping order)
+    out = rdf.copy()
+    if "_sn" in out.columns:
+        out["SN"] = out["_sn"]  # restore the source identifier
+    src_cols = [db for db in headers if db in out.columns]
+    ordered = (["SN"] if "SN" in out.columns else []) + src_cols \
+        + [c for c in _REASON_COLS if c in out.columns]
+    return _xlsx_bytes(out[ordered].rename(columns=headers))
 
 
 @st.dialog("Upload a data file")
@@ -143,6 +162,71 @@ elif clean_df is not None:
 
 st.divider()
 
+# --- Data completeness by category -----------------------------------------
+st.subheader("Data completeness by category")
+if clean_df is not None and not clean_df.empty:
+    # Prioritised surveillance fields, critical first. Each maps to one or more
+    # DB columns; completeness = mean share of non-blank values across them.
+    COMPLETENESS_CATEGORIES = [
+        ("Case counts (notification date)", ["date_of_notification"]),
+        ("Epi week", ["epi_week"]),
+        ("Geographic (region / locality)", ["health_region", "locality"]),
+        ("Age & sex", ["age", "gender"]),
+        ("Case classification", ["case_classification"]),
+        ("Local vs imported", ["local_or_imported"]),
+        ("Outcome", ["outcome"]),
+        ("Disposition", ["dmu_hospitalised_tba_missing"]),
+        ("Symptoms", ["symptoms"]),
+        ("Onset date", ["date_of_onset_symptoms"]),
+        ("Nationality", ["nationality"]),
+        ("Occupation", ["occupation"]),
+        ("Lab result (PCR)", ["pcr_result"]),
+        ("Epi linkage", ["epi_linkage"]),
+        ("Comorbidities", ["comorbidities_pmh"]),
+    ]
+
+    def _completeness(cols: list[str]) -> float:
+        present = [c for c in cols if c in clean_df.columns]
+        if not present:
+            return 0.0
+        shares = [(clean_df[c].notna() & (clean_df[c].astype(str).str.strip() != "")).mean()
+                  for c in present]
+        return round(sum(shares) / len(shares) * 100, 1)
+
+    rows = [{"category": lbl, "pct": _completeness(cols)}
+            for lbl, cols in COMPLETENESS_CATEGORIES]
+    cdf = pd.DataFrame(rows)
+
+    def _band_color(p: float) -> str:
+        return who.WHO_GREEN if p >= 80 else (who.WHO_AMBER if p >= 50 else who.WHO_RED)
+
+    cdf["color"] = cdf["pct"].map(_band_color)
+    fig = px.bar(cdf, x="pct", y="category", orientation="h",
+                 text=cdf["pct"].map(lambda v: f"{v:.0f}%"))
+    fig.update_traces(marker_color=list(cdf["color"]), textposition="outside",
+                      cliponaxis=False)
+    fig.update_xaxes(range=[0, 108], ticksuffix="%", title="")
+    fig.update_yaxes(categoryorder="array", categoryarray=list(cdf["category"])[::-1],
+                     title="")
+    st.plotly_chart(who.style_fig(fig, height=44 * len(cdf) + 80),
+                    use_container_width=True)
+    gaps = cdf.loc[cdf["pct"] < 50, "category"].tolist()
+    st.caption(
+        "Share of rows with a recorded (non-blank) value per surveillance field, "
+        "ordered by priority. Green ≥80% · amber 50–79% · red <50%."
+        + (f" **Critical gaps (<50%):** {', '.join(gaps)}." if gaps else ""))
+    who.notes(
+        "Field-level data completeness for the loaded dataset — which critical "
+        "surveillance variables are well captured versus sparsely recorded.",
+        "Measures non-blank values only, not correctness. Categories grouping "
+        "several columns average their completeness. Recompute each load; as new "
+        "data arrives the bars move, so use this to target the source fields that "
+        "most need improvement (here: PCR result, epi-linkage and comorbidities).")
+else:
+    st.caption("Completeness chart needs loaded data.")
+
+st.divider()
+
 # Everything below the buttons sits in a margin-constrained container
 # (.st-key-dq_content) so wide tables never overflow the viewport.
 with st.container(key="dq_content"):
@@ -173,7 +257,19 @@ with st.container(key="dq_content"):
         rdf = pd.read_csv(rej)
         st.caption(f"{len(rdf)} rejected row(s) · {rej.name}")
         st.dataframe(rdf, use_container_width=True, hide_index=True)
-        st.download_button("Download rejects CSV", rdf.to_csv(index=False), file_name=rej.name)
+        st.download_button(
+            "Download rejects to fix (.xlsx)",
+            _rejects_source_xlsx(rdf),
+            file_name=f"{rej.stem}_to_fix.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        st.caption(
+            "Source-format workbook: original spreadsheet headers, plus "
+            "`failed_columns` / `reject_reasons` at the end for filtering. Fix the "
+            "flagged cells, then drop it in `data/incoming/` and re-run — the two "
+            "reason columns are ignored on import, and already-loaded clean rows "
+            "are skipped (content-hash dedupe). Note: values are post-cleaning, so "
+            "multi-value fields (e.g. symptoms) are already canonicalised.")
     else:
         st.success("No rejected rows in the latest run.")
 

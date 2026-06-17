@@ -11,6 +11,7 @@ from chikungunya_pipeline.sanitize import (
     clean_string,
     clean_yes_no,
     sanitize_dataframe,
+    standardize_disposition,
 )
 
 
@@ -33,6 +34,40 @@ def test_clean_gender():
     assert clean_gender("M") == "Male"
     assert clean_gender("female") == "Female"
     assert clean_gender("other") is None
+
+
+def test_standardize_disposition():
+    # Blank / null -> TBA.
+    assert standardize_disposition("") == "TBA"
+    assert standardize_disposition("   ") == "TBA"
+    assert standardize_disposition(None) == "TBA"
+    assert standardize_disposition(float("nan")) == "TBA"
+    # Hospitalised keywords (case-insensitive, substring).
+    assert standardize_disposition("ADMITTED DCF") == "HOSPITALISED"
+    assert standardize_disposition("hospitalised") == "HOSPITALISED"
+    assert standardize_disposition("DAMA") == "HOSPITALISED"
+    assert standardize_disposition("In ward 3") == "HOSPITALISED"
+    # DMU is its own category.
+    assert standardize_disposition("DMU") == "DMU"
+    # Personal isolation: all variants incl. ISO/ISOLATION and SI/HI abbrevs.
+    assert standardize_disposition("Home Isolation") == "PERSONAL ISOLATION"
+    assert standardize_disposition("SELF ISO") == "PERSONAL ISOLATION"
+    assert standardize_disposition("ISOLATION") == "PERSONAL ISOLATION"
+    assert standardize_disposition("ISO") == "PERSONAL ISOLATION"
+    assert standardize_disposition("SI") == "PERSONAL ISOLATION"
+    assert standardize_disposition("SI/SOS") == "PERSONAL ISOLATION"
+    assert standardize_disposition("HI") == "PERSONAL ISOLATION"
+    # Discharged.
+    assert standardize_disposition("DISCHARGED ON 06 May 26") == "DISCHARGED"
+    # Missing / unreachable — "SI" inside "MISSING" must NOT trigger isolation.
+    assert standardize_disposition("MISSING") == "MISSING"
+    assert standardize_disposition("UNREACHABLE") == "MISSING"
+    assert standardize_disposition("Missing / Unreachable") == "MISSING"
+    # Unmatched free text -> TBA.
+    assert standardize_disposition("NIL") == "TBA"
+    assert standardize_disposition("Active") == "TBA"
+    # First match wins: HOSPITAL precedes isolation in the rule order.
+    assert standardize_disposition("Hospital then home") == "HOSPITALISED"
 
 
 def test_clean_int_range():

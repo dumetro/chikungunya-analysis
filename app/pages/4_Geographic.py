@@ -10,7 +10,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from data_access import apply_filters, load_cases
+from data_access import REGION_TO_DISTRICT, apply_filters, load_cases
 from filters import sidebar_filters
 from theme import who_style as who
 
@@ -20,16 +20,9 @@ who.top_nav(active="Geographic")
 who.header("Geographic Distribution", "Cases by health region, locality and origin",
            eyebrow="Where")
 
-# Health region -> Mauritius district, matching the `province` field in
-# data/geodata/mauritius_adm1.json. health_region is the MoH surveillance zone
-# (health_office is a referral/testing hub, not a local catchment, so it is not
-# a reliable geographic key). Regions 6-8 are not yet present in the data.
-REGION_TO_DISTRICT = {
-    "Region 1": "PORT LOUIS", "Region 2": "PAMPLEMOUSSES",
-    "Region 3": "RIVIÈRE DU REMPART", "Region 4": "FLACQ",
-    "Region 5": "GRAND PORT", "Region 6": "SAVANNE",
-    "Region 7": "BLACK RIVER", "Region 8": "PLAINES WILHEMS",
-}
+# REGION_TO_DISTRICT (MoH health region -> district, matching the geojson
+# `province` field) is shared from data_access. health_region is the surveillance
+# zone; health_office is a referral/testing hub, not a reliable geographic key.
 GEOJSON_PATH = Path(__file__).resolve().parents[2] / "data" / "geodata" / "mauritius_adm1.json"
 
 
@@ -120,6 +113,14 @@ elif "health_region" in fdf.columns and not fdf.empty:
         "for the classification breakdown (Confirmed / Probable / Suspected / "
         "Unclassified). Moka and Regions 6–8 (Savanne, Black River, Plaines "
         "Wilhems) have no cases yet.")
+    who.notes(
+        "Choropleth of total reported cases by district, with the classification "
+        "breakdown on hover.",
+        "Cases are placed via the `health_region`→district mapping onto the "
+        "bundled Mauritius GeoJSON, so it needs `health_region` populated. Only "
+        "Regions 1–5 have data today (others render white/0). If health-region "
+        "definitions or the boundary file change, update `REGION_TO_DISTRICT` / "
+        "the GeoJSON. This is region-of-report, not residence.")
 else:
     st.info("Needs the health_region column — not available for the current filter.")
 
@@ -132,6 +133,12 @@ if "health_region" in fdf:
     fig = px.bar(reg, x="health_region", y="cases", color="cases",
                  color_continuous_scale=who.SEQUENTIAL_BLUE)
     st.plotly_chart(who.style_fig(fig), use_container_width=True)
+    who.notes(
+        "Raw case counts per health-region label (Region 1–N), without mapping "
+        "to geography.",
+        "Requires `health_region` populated; uses the labels exactly as recorded "
+        "('Unknown' = blank). New regions appear automatically as they enter the "
+        "data — no code change needed.")
 
 c1, c2 = st.columns(2)
 with c1:
@@ -143,6 +150,12 @@ with c1:
         fig.update_traces(marker_color=who.WHO_TEAL)
         fig.update_layout(yaxis=dict(autorange="reversed"))
         st.plotly_chart(who.style_fig(fig, height=460), use_container_width=True)
+        who.notes(
+            "The 15 localities with the most cases.",
+            "Uses `locality` as recorded (currently fully populated, ~150 "
+            "distinct). These are case-*burden* counts, not incidence — populous "
+            "localities rank high regardless of risk; a per-capita view would need "
+            "locality population denominators.")
 with c2:
     st.subheader("Local vs imported by region")
     if {"health_region", "local_or_imported"} <= set(fdf.columns):
@@ -154,6 +167,11 @@ with c2:
         fig = px.bar(grp, x="health_region", y="cases", color="local_or_imported",
                      barmode="stack")
         st.plotly_chart(who.style_fig(fig, height=460), use_container_width=True)
+        who.notes(
+            "Local vs imported case mix within each health region.",
+            "Needs `local_or_imported` populated; today it is almost entirely "
+            "'Local' with no 'Imported' recorded, so this becomes informative only "
+            "once importation status is captured at source ('Unknown' = blank).")
 
 st.divider()
 who.section("Case classification by health region",
@@ -179,6 +197,12 @@ if {"health_region", "case_classification"} <= set(fdf.columns) and not fdf.empt
                     use_container_width=True)
     st.caption("Case counts per health region and classification for the current "
                "filter. Region labels are as recorded in the source data.")
+    who.notes(
+        "Case counts cross-tabulated by health region and WHO/PAHO classification "
+        "— a quick read of where confirmed vs suspected burden sits.",
+        "Requires `health_region` and the derived `case_classification`. Region "
+        "labels are the raw 'Region N' values (not districts). Cells shift as "
+        "pending PCR results resolve and reclassify cases.")
 else:
     st.info("Needs the health_region and case_classification columns — "
             "not available for the current filter.")

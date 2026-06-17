@@ -27,6 +27,33 @@ DATE_COLS = [
     "date_attended", "date_of_admission", "date_of_negative_pcr",
 ]
 
+# MoH health region -> Mauritius district (matches the `province` field in
+# data/geodata/mauritius_adm1.json). Single source of truth for the geographic
+# and attack-rate views. Regions 6-8 are not yet present in the case data.
+REGION_TO_DISTRICT = {
+    "Region 1": "PORT LOUIS", "Region 2": "PAMPLEMOUSSES",
+    "Region 3": "RIVIÈRE DU REMPART", "Region 4": "FLACQ",
+    "Region 5": "GRAND PORT", "Region 6": "SAVANNE",
+    "Region 7": "BLACK RIVER", "Region 8": "PLAINES WILHEMS",
+}
+
+# District resident population (for attack-rate denominators), keyed to the
+# district names above.
+DISTRICT_POPULATION = {
+    "PORT LOUIS": 108_594, "PAMPLEMOUSSES": 141_696,
+    "RIVIÈRE DU REMPART": 110_756, "FLACQ": 138_156,
+    "GRAND PORT": 111_092, "SAVANNE": 67_284,
+    "PLAINES WILHEMS": 347_589, "MOKA": 85_614, "BLACK RIVER": 89_053,
+}
+
+# National population by the analysis age bands, aggregated from World Bank 2023
+# 5-year bands (data/popdata/mau_population.csv): 0-19 = 0-4…15-19, etc.
+# Keyed to the canonical AGE_GROUP labels ("60-150" = 60+). Note this is 2023 and
+# national, whereas DISTRICT_POPULATION is 2020 — they intentionally differ.
+AGE_GROUP_POPULATION = {
+    "0-19": 279_052, "20-39": 387_843, "40-59": 352_812, "60-150": 241_337,
+}
+
 
 @st.cache_data(ttl=300, show_spinner="Loading case data …")
 def load_cases() -> pd.DataFrame:

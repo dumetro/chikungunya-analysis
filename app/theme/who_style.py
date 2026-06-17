@@ -196,7 +196,7 @@ _CSS = f"""
 # multipage URL scheme (Home is served at "/").
 NAV_PAGES = [
     ("/", "Overview"),
-    ("/Epi_Curve", "Epi Curve"),
+    ("/Surveillance", "Surveillance"),
     ("/Demographics", "Demographics"),
     ("/Clinical", "Clinical"),
     ("/Geographic", "Geographic"),
@@ -264,3 +264,15 @@ def callout(text: str, kind: str = "info") -> None:
 def style_fig(fig: go.Figure, height: int = 420) -> go.Figure:
     fig.update_layout(template="plotly_white+who", height=height)
     return fig
+
+
+def notes(what: str, accurate: str,
+          label: str = "ℹ️ Notes & data requirements") -> None:
+    """Collapsible explanatory note placed under a chart.
+
+    ``what`` describes the analytic; ``accurate`` states what is required to keep
+    it correct as new data arrives.
+    """
+    with st.expander(label):
+        st.markdown(f"**What it shows:** {what}")
+        st.markdown(f"**Keeping it accurate with new data:** {accurate}")
