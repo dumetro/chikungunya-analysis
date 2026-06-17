@@ -65,3 +65,38 @@ def test_small_number_not_treated_as_serial():
 def test_iso_string_helper():
     assert to_iso_string("03/04/2024") == "2024-04-03"
     assert to_iso_string("") is None
+
+
+@pytest.mark.parametrize("value", ["3.26", "01.03.26", "3.2026", "01.03.2026", 3.26])
+def test_dotted_partial_dates_resolve_to_march_2026(value):
+    # All of these represent a date in March 2026.
+    assert to_iso8601(value) == dt.date(2026, 3, 1)
+
+
+def test_dotted_full_dates():
+    assert to_iso8601("01.03.26") == dt.date(2026, 3, 1)
+    assert to_iso8601("15.03.2026") == dt.date(2026, 3, 15)
+
+
+def test_assume_year_forces_year():
+    # With assume_year, the year is overridden regardless of the source year.
+    assert to_iso8601("05/04/2023", assume_year=2026) == dt.date(2026, 4, 5)
+    assert to_iso8601("25.12.2019", assume_year=2026) == dt.date(2026, 12, 25)
+    # Without it, the parsed year is kept.
+    assert to_iso8601("25.12.2019") == dt.date(2019, 12, 25)
+
+
+def test_decimal_not_treated_as_dotted_date():
+    # "3.5" is ambiguous (1-digit parts) -> not treated as a date.
+    assert to_iso8601("3.5") is None
+    assert to_iso8601("3.5", assume_year=2026) is None
+
+
+def test_year_less_day_month_uses_assume_year():
+    # "27.05" is day.month with the year missing -> use DATA_YEAR.
+    assert to_iso8601("27.05", assume_year=2026) == dt.date(2026, 5, 27)
+    assert to_iso8601("27.5", assume_year=2026) == dt.date(2026, 5, 27)
+    # zero-padded both-<=12 resolves day-first
+    assert to_iso8601("01.03", assume_year=2026) == dt.date(2026, 3, 1)
+    # without a year to borrow, it can't be completed
+    assert to_iso8601("27.05") is None

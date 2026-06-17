@@ -46,6 +46,14 @@ def read_excel(path: str | Path, mapping: ColumnMapping | None = None) -> Ingest
         else:
             unmapped.append(str(col))
 
+    # Capture the source SN (serial number) before dropping unmapped columns —
+    # it is the natural key for data-lineage tracking.
+    sn_values = None
+    for col in raw.columns:
+        if _norm_header(col) == "sn":
+            sn_values = raw[col].astype(object).where(raw[col].notna(), None).tolist()
+            break
+
     df = raw.rename(columns=rename)
     # Keep only mapped DB columns (dedupe if two headers map to the same column).
     keep = [c for c in df.columns if c in set(rename.values())]
@@ -53,6 +61,11 @@ def read_excel(path: str | Path, mapping: ColumnMapping | None = None) -> Ingest
 
     # 1-based Excel row number (header is at header_row, data starts after).
     df.insert(0, "_source_row", range(mapping.header_row + 2, mapping.header_row + 2 + len(df)))
+    # Source SN for lineage (falls back to the Excel row number if absent).
+    if sn_values is not None:
+        df.insert(1, "_sn", [str(v) if v is not None else None for v in sn_values])
+    else:
+        df.insert(1, "_sn", df["_source_row"].astype(str))
 
     return IngestResult(
         df=df,

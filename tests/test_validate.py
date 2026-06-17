@@ -36,6 +36,49 @@ def _df():
     )
 
 
+def test_max_length_rejects_overlong_values():
+    df = pd.DataFrame(
+        {
+            "_source_row": [2, 3],
+            "age": [30, 40],
+            "dmu_hospitalised_tba_missing": ["SHORT", "X" * 60],
+        }
+    )
+    outcome = validate_dataframe(df, {"conditional_rules": True},
+                                 max_lengths={"dmu_hospitalised_tba_missing": 50})
+    assert set(outcome.passed["_source_row"]) == {2}
+    failed = outcome.failed.set_index("_source_row")["reject_reasons"].to_dict()
+    assert 3 in failed and "exceeds max length 50" in failed[3]
+
+
+def test_schema_checks_type_length_and_range():
+    schema = {
+        "dmu_hospitalised_tba_missing": {"kind": "str", "length": 50, "nullable": True},
+        "age": {"kind": "int", "length": None, "nullable": True, "min": -32768, "max": 32767},
+        "date_of_onset_symptoms": {"kind": "date", "length": None, "nullable": True},
+    }
+    df = pd.DataFrame(
+        {
+            "_source_row": [2, 3, 4, 5],
+            "dmu_hospitalised_tba_missing": ["ok", "Y" * 60, "ok", "ok"],
+            "age": [30, 40, "not-a-number", 50],
+            "date_of_onset_symptoms": [
+                dt.date(2024, 1, 1), dt.date(2024, 1, 1), dt.date(2024, 1, 1), "2024-13-40",
+            ],
+        }
+    )
+    outcome = validate_dataframe(df, {"conditional_rules": True}, schema=schema)
+    failed = outcome.failed.set_index("_source_row")["reject_reasons"].to_dict()
+    cols = outcome.failed.set_index("_source_row")["failed_columns"].to_dict()
+    assert set(outcome.passed["_source_row"]) == {2}
+    # reason names the column and the rule/expectation; failed_columns lists the column
+    assert "dmu_hospitalised_tba_missing: exceeds max length 50" in failed[3]
+    assert "dmu_hospitalised_tba_missing" in cols[3]
+    assert "age: is not an integer" in failed[4] and "age" in cols[4]
+    assert "date_of_onset_symptoms: is not a valid date" in failed[5]
+    assert "date_of_onset_symptoms" in cols[5]
+
+
 def test_validate_splits_pass_fail():
     outcome = validate_dataframe(_df(), CFG)
     failed_rows = set(outcome.failed["_source_row"])

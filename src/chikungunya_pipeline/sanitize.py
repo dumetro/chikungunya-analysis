@@ -7,10 +7,12 @@ nationality / symptoms / comorbidities) happens later in ``normalize.py``.
 
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 import pandas as pd
 
+from .config import get_settings
 from .dates import to_iso8601
 from .mapping_config import ColumnMapping
 
@@ -22,6 +24,13 @@ _NO_TOKENS = {"no", "n", "false", "0", "negative", "neg"}
 
 _MALE_TOKENS = {"m", "male", "man", "boy"}
 _FEMALE_TOKENS = {"f", "female", "woman", "girl"}
+
+# Disposition field: DMU/Hospitalised/TBA/Missing. Standardised to a small fixed
+# set via case-insensitive substring matching (first match wins).
+DISPOSITION_COLUMN = "dmu_hospitalised_tba_missing"
+# Isolation abbreviations matched as whole words so they don't false-match
+# substrings (e.g. "SI" inside "MISSING").
+_ISOLATION_ABBREV = re.compile(r"\b(?:SI|HI)\b")
 
 
 def clean_string(value: object) -> Optional[str]:
@@ -59,6 +68,35 @@ def clean_gender(value: object) -> Optional[str]:
     return None
 
 
+def standardize_disposition(value: object) -> str:
+    """Standardise the DMU/Hospitalised/TBA/Missing disposition field.
+
+    Case-insensitive, first match wins: blank -> ``TBA``;
+    ADMIT/HOSPITAL/DAMA/WARD -> ``HOSPITALISED``; ``DMU`` -> ``DMU``;
+    any isolation variant (HOME/SELF/ISO substrings, or the whole-word
+    abbreviations SI/HI) -> ``PERSONAL ISOLATION``; DISCHARGED -> ``DISCHARGED``;
+    UNREACH/MISSING -> ``MISSING``; anything else -> ``TBA``. Never returns None.
+    """
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return "TBA"
+    text = str(value).strip()
+    if not text:
+        return "TBA"
+    upper = text.upper()
+    if any(k in upper for k in ("ADMIT", "HOSPITAL", "DAMA", "WARD")):
+        return "HOSPITALISED"
+    if "DMU" in upper:
+        return "DMU"
+    if (any(k in upper for k in ("HOME", "SELF", "ISO"))
+            or _ISOLATION_ABBREV.search(upper)):
+        return "PERSONAL ISOLATION"
+    if "DISCHARGED" in upper:
+        return "DISCHARGED"
+    if any(k in upper for k in ("UNREACH", "MISSING")):
+        return "MISSING"
+    return "TBA"
+
+
 def clean_int(value: object, *, lo: int | None = None, hi: int | None = None) -> Optional[int]:
     """Coerce to int; values outside [lo, hi] become None (caught later)."""
     text = clean_string(value)
@@ -92,11 +130,16 @@ def sanitize_dataframe(df: pd.DataFrame, mapping: ColumnMapping) -> pd.DataFrame
     int_cols = set(mapping.integer_columns)
     yn_cols = set(mapping.yes_no_columns)
 
+    # Date parsing options from settings (day-first, and a forced data year).
+    settings = get_settings()
+    dayfirst, assume_year = settings.date_dayfirst, settings.data_year
+
     for col in out.columns:
-        if col == "_source_row":
+        if str(col).startswith("_"):  # meta columns (_source_row, _sn)
             continue
         if col in date_cols:
-            out[col] = out[col].map(lambda v: to_iso8601(v))
+            out[col] = out[col].map(
+                lambda v: to_iso8601(v, dayfirst=dayfirst, assume_year=assume_year))
         elif col == "age":
             out[col] = out[col].map(lambda v: clean_int(v, lo=0, hi=120))
         elif col == "gestation_week":
@@ -107,6 +150,9 @@ def sanitize_dataframe(df: pd.DataFrame, mapping: ColumnMapping) -> pd.DataFrame
             out[col] = out[col].map(clean_yes_no)
         elif col == "gender":
             out[col] = out[col].map(clean_gender)
+        elif col == DISPOSITION_COLUMN:
+            # Operates on the raw value (mirrors the source formula's TRIM/SEARCH).
+            out[col] = out[col].map(standardize_disposition)
         else:
             out[col] = out[col].map(clean_string)
 

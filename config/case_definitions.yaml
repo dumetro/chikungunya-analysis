@@ -1,0 +1,99 @@
+# Chikungunya virus disease — surveillance case definitions.
+#
+# Machine-readable encoding of the WHO/PAHO and CDC/CSTE case definitions, plus
+# the rules for deriving a case classification from the chikungunya_analysis
+# columns. A future classify_case() helper can read this file so the logic stays
+# configurable rather than hard-coded. See docs/case_definitions.md for the
+# narrative reference and sources.
+
+meta:
+  disease: Chikungunya virus disease
+  default_scheme: who_paho        # who_paho | cdc
+  exposure_window_days: 15        # onset must be within N days of exposure (WHO/PAHO)
+  last_reviewed: "2026-06-03"
+  sources:
+    - "CDC NNDSS — Arboviral Diseases (Neuroinvasive & Non-neuroinvasive), 2015 Case Definition: https://ndc.services.cdc.gov/case-definitions/arboviral-diseases-neuroinvasive-and-non-neuroinvasive-2015/"
+    - "CDC — Chikungunya clinical testing & diagnosis: https://www.cdc.gov/chikungunya/hcp/diagnosis-testing/index.html"
+    - "WHO — Chikungunya global rapid risk assessment (2026): https://cdn.who.int/media/docs/default-source/_sage-2026/who-rapid-risk-assessment_chikungunya-virus_global_v1.pdf"
+    - "PAHO — Epidemiological Alert: Chikungunya & Oropouche (Aug 2025): https://www.paho.org/sites/default/files/2025-09/2025-ago-28-phe-alerta-chkvorovengfinal.pdf"
+
+schemes:
+
+  who_paho:
+    label: WHO / PAHO standardized surveillance definition
+    tiers:
+      suspected:
+        description: >-
+          Acute onset of fever AND severe arthralgia/arthritis not explained by
+          another medical condition, in a person residing in or having visited
+          an area with transmission within ~15 days before symptom onset.
+        clinical: "fever AND (arthralgia OR arthritis), acute onset, no better explanation"
+        epidemiologic: "residence in / travel to a transmission area within the exposure window"
+        laboratory: null
+      probable:
+        description: >-
+          A suspected case with a positive CHIKV IgM (single acute serum) pending
+          confirmation; OR, during a declared outbreak, a suspected case
+          epidemiologically linked to a confirmed case.
+        clinical: "as for suspected"
+        laboratory: "chikv_igm_positive (single serum)"
+        epidemiologic: "epidemiological link to a confirmed case (outbreak setting)"
+      confirmed:
+        description: >-
+          A suspected case with at least one positive laboratory test.
+        clinical: "as for suspected"
+        laboratory:
+          any_of:
+            - rt_pcr_positive
+            - virus_isolation
+            - igm_seroconversion
+            - fourfold_antibody_titre_rise   # neutralizing / IgG, paired sera
+
+  cdc:
+    label: CDC / CSTE NNDSS — Arboviral Diseases, Non-neuroinvasive (2015)
+    note: >-
+      No 'suspected' tier in NNDSS; chikungunya is reported as the
+      non-neuroinvasive arboviral disease. A positive IgM must be confirmed by
+      neutralizing antibody (PRNT) to count as confirmed.
+    tiers:
+      probable:
+        description: "Clinical criteria + presumptive lab (IgM in serum, no other testing)."
+        clinical: "fever AND polyarthralgia, no more-likely diagnosis"
+        laboratory: "chikv_igm_serum_only"
+      confirmed:
+        description: "Clinical criteria + a confirmatory laboratory result."
+        clinical: "fever AND polyarthralgia, no more-likely diagnosis"
+        laboratory:
+          any_of:
+            - rt_pcr_positive
+            - virus_isolation
+            - igm_with_prnt_confirmation
+            - fourfold_antibody_titre_rise
+
+# Laboratory timing guidance (informational; used for QA, not classification).
+laboratory_timing:
+  rt_pcr_window_days: [0, 8]      # viraemia — RT-PCR best in the first ~week
+  serology_after_day: 7          # IgM/serology becomes useful after week 1
+  igm_requires_confirmation: true # PRNT/neutralizing to rule out alphavirus cross-reactivity
+
+# How to derive a classification from the chikungunya_analysis columns.
+# Evaluated top-down by classify_case(); first matching tier wins.
+dataset_mapping:
+  onset_date_column: date_of_onset_symptoms
+  pcr_result_column: pcr_result
+  pcr_positive_values: [Positive]            # matches analysis_lookups PCR_RESULT
+  epi_linkage_column: epi_linkage
+  symptoms_column: symptoms
+  clinical_fever_terms: [fever, pyrexia]
+  clinical_arthralgia_terms: [arthralgia, arthritis, joint pain, joint pains]
+
+  # Ordered rules: each rule -> resulting classification.
+  classification_rules:
+    - when: pcr_positive
+      classify: confirmed
+    - when: clinical_and_epi_link        # meets clinical AND epi_linkage present
+      classify: probable
+    - when: clinical                     # fever + arthralgia only
+      classify: suspected
+    - when: otherwise
+      classify: unclassified

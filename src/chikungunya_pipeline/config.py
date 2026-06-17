@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -25,15 +26,14 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    database_url: str = Field(
-        default="postgresql+psycopg2://postgres:postgres@localhost:5432/chikungunya",
-        alias="DATABASE_URL",
-    )
+    # Required — sourced from DATABASE_URL in the .env file (or the environment).
+    # No default: a missing value raises a clear validation error rather than
+    # silently connecting to placeholder credentials.
+    database_url: str = Field(alias="DATABASE_URL")
 
-    # Default source workbook used whenever a file is not given explicitly.
-    source_file: Path = Field(
-        default=Path("data/incoming/Chikungunya_mau_2026.xlsx"), alias="SOURCE_FILE"
-    )
+    # Required — source workbook used whenever a file is not given explicitly.
+    # Sourced from SOURCE_FILE in the .env file (or the environment); no default.
+    source_file: Path = Field(alias="SOURCE_FILE")
 
     incoming_dir: Path = Field(default=Path("data/incoming"), alias="INCOMING_DIR")
     rejects_dir: Path = Field(default=Path("data/rejects"), alias="REJECTS_DIR")
@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     )
 
     date_dayfirst: bool = Field(default=True, alias="DATE_DAYFIRST")
+    # Force the year of every parsed date (data is known to be one year). None = off.
+    data_year: Optional[int] = Field(default=None, alias="DATA_YEAR")
     load_mode: str = Field(default="append", alias="LOAD_MODE")
 
     def resolve(self, path: Path) -> Path:

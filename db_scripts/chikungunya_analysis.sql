@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS public.chikungunya_analysis
     outcome character varying(50) COLLATE pg_catalog."default",
     dmu_hospitalised_tba_missing character varying(50) COLLATE pg_catalog."default",
     remarks text COLLATE pg_catalog."default",
+    case_classification character varying(20) COLLATE pg_catalog."default",
     created_at timestamp with time zone NOT NULL DEFAULT now(),
     updated_at timestamp with time zone NOT NULL DEFAULT now(),
     CONSTRAINT chikungunya_analysis_pkey PRIMARY KEY (id),
