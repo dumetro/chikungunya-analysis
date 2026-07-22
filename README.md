@@ -28,8 +28,8 @@ make test                    # unit tests
 
 > Requires an existing PostgreSQL database containing `chikungunya_analysis`,
 > the reference tables (`symptoms`, `nationalities`, `comorbidities`,
-> `occupations`, `analysis_lookups`) and the `*_raw_map` tables. DDL lives in
-> [`db_scripts/`](db_scripts/).
+> `occupations`, `healthfacilities`, `analysis_lookups`) and the `*_raw_map`
+> tables. DDL lives in [`db_scripts/`](db_scripts/).
 
 ## Pipeline stages
 
@@ -38,7 +38,7 @@ make test                    # unit tests
 | Ingest | `ingest.py` | Reads the Excel sheet, maps headers → DB columns via `config/column_mapping.yaml`, keeps `_source_row` and the source `SN` (`_sn`) for traceability. |
 | Correct | `lineage.py` | Applies SN-keyed corrections from `config/corrections.yaml` (move/clear/set) for cross-pollinated values (e.g. a symptom string in the `pregnancy` column). Each change is logged for lineage. |
 | Sanitize | `sanitize.py` | Trims/cases strings, canonical Yes/No & gender, numeric coercion, **all dates → ISO 8601** via `dates.to_iso8601()`. |
-| Normalize | `normalize.py` | Maps `occupation`/`nationality`/`symptoms`/`comorbidities_pmh` to canonical reference values via the `*_raw_map` + reference tables. **Lookup-coded columns** (`gender`, `age_group`, `pcr_result`, `outcome`, `local_or_imported`, `active_passive`) are normalised against `analysis_lookups` by: case-insensitive exact match → `value_overrides` synonyms → `value_patterns` regex → else kept raw and logged with fuzzy suggestions. Nothing is dropped silently. |
+| Normalize | `normalize.py` | Maps `occupation`/`nationality`/`symptoms`/`comorbidities_pmh` and the facility columns `health_institution_attended`/`health_institution` to canonical reference values via the `*_raw_map` + reference tables. **Lookup-coded columns** (`gender`, `age_group`, `pcr_result`, `outcome`, `local_or_imported`, `active_passive`) are normalised against `analysis_lookups` by: case-insensitive exact match → `value_overrides` synonyms → `value_patterns` regex → else kept raw and logged with fuzzy suggestions. Nothing is dropped silently. |
 | Validate | `validate.py` | Great Expectations **core** suite mirroring the DB CHECK constraints (ranges, allowed sets, date ordering, conditional rules). Splits rows into passed / rejected. |
 | Load | `load.py` | Transactional bulk insert; SHA-256 content-hash dedupe via `pipeline_load_log`; `append` or `replace` mode. |
 
@@ -61,7 +61,13 @@ returning a `datetime.date` (ISO `YYYY-MM-DD`) or `None`. Day-first by default
   or extend `value_overrides` / `value_patterns`. Offline (no DB) the pipeline
   falls back to `data/incoming/analysis_lookups.csv`.
 - **Reference entity tables** (`symptoms`, `comorbidities`, `occupations`,
-  `nationalities`) hold the canonical names. `symptoms` also carries optional
+  `nationalities`, `healthfacilities`) hold the canonical names. The
+  `healthfacilities` table is the canonical Mauritius facility list (name, type,
+  region); dirty source spellings map to it through `healthfacility_raw_map`.
+  See `db_scripts/healthfacilities.sql`, `db_scripts/healthfacility_raw_map.sql`
+  and the `seed_healthfacilit*` scripts; `docs/healthfacility_mapping_review.csv`
+  lists every source spelling and the facility it maps to (blank = left for
+  review, e.g. `YCCH`, health-office / fever-watch surveillance entries). `symptoms` also carries optional
   `category` / `description` metadata — see
   `db_scripts/extend_symptoms_cdc_who.sql`, which adds those columns, seeds the
   CDC/WHO chikungunya symptom set, and backfills clinical groupings

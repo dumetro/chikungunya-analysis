@@ -72,6 +72,8 @@ multivalue_columns:
 coded_columns:
   occupation: occupation
   nationality: nationality
+  health_institution_attended: facility
+  health_institution: facility
 
 # Single-value columns normalised against analysis_lookups (lk_category).
 # The canonical value list per category lives in analysis_lookups; raw values

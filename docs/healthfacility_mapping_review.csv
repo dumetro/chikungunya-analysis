@@ -1,0 +1,288 @@
+raw_value,count,mapped_facility
+vh,1195,Victoria Hospital
+smc,519,Stanley Mediclinic
+jh,156,Dr A. G. Jeetoo Hospital
+ycch,153,Yves Cantin CHC
+aed jh,113,Dr A. G. Jeetoo Hospital
+vh uns,68,Victoria Hospital
+jh aed,66,Dr A. G. Jeetoo Hospital
+coromandel mc,63,Coromandel Mediclinic
+agjh,61,Dr A. G. Jeetoo Hospital
+stanley mediclinic,60,Stanley Mediclinic
+unsorted,58,Dr A. G. Jeetoo Hospital
+odette leal chc,54,Odette Leal CHC
+unsorted jh,53,Dr A. G. Jeetoo Hospital
+stanley mc,44,Stanley Mediclinic
+coromandel mediclinic,42,Coromandel Mediclinic
+bambous ahc,39,Bambous AHC
+c lab,38,C-Lab
+nsh,38,New Souillac Hospital
+wellkin,37,Wellkin Hospital
+jnh,36,Jawaharlal Nehru Hospital
+jeetoo hospital,33,Dr A. G. Jeetoo Hospital
+clab,31,C-Lab
+victoria hospital,28,Victoria Hospital
+ssrnh,27,Sir Seewoosagur Ramgoolam National Hospital
+wellkin hospital,26,Wellkin Hospital
+jh a&e,25,Dr A. G. Jeetoo Hospital
+victoria,23,Victoria Hospital
+welkin,20,Wellkin Hospital
+jh unsorted,20,Dr A. G. Jeetoo Hospital
+lady twining ahc,20,Lady Twining AHC
+lady twinning ahc,20,Lady Twining AHC
+uns jh,19,Dr A. G. Jeetoo Hospital
+mediclinic coromandel,18,Coromandel Mediclinic
+aed vh,18,Victoria Hospital
+clab darne,18,C-Care Darné
+c care,17,C-Care
+dr ag jh,16,Dr A. G. Jeetoo Hospital
+aed,15,Dr A. G. Jeetoo Hospital
+darne,14,C-Care Darné
+sajh,14,Sir Anerood Jugnauth Hospital
+new souillac hospital,14,New Souillac Hospital
+vh aed,14,Victoria Hospital
+c-lab,12,C-Lab
+c lab wellkin,12,C-Lab
+petite riviere mc,10,Petite Rivière Mediclinic
+medisave,10,Medisave
+nil,10,
+c lab darne,10,C-Care Darné
+roche bois chc,9,Roche Bois CHC
+new grove ahc,9,New Grove AHC
+ccare,8,C-Care
+royal green,8,Royal Green Hospital
+royal green hospital,7,Royal Green Hospital
+vh a&e,7,Victoria Hospital
+artemis,7,Artemis Hospital
+pte riv mc,7,Petite Rivière Mediclinic
+pas chc,7,Pointe aux Sables CHC
+trauma & emergency agjh,7,Dr A. G. Jeetoo Hospital
+c care darne,6,C-Care Darné
+jeetoo,6,Dr A. G. Jeetoo Hospital
+tyack ahc,6,Tyack AHC
+petite riviere mediclinic,6,Petite Rivière Mediclinic
+clinic muller,6,Clinic Muller
+lady twinning,6,Lady Twining AHC
+bon pasteur,5,Clinique du Bon Pasteur
+nsh a&e,5,New Souillac Hospital
+clinic mauricienne,5,La Clinique Mauricienne
+bouloux ahc,5,Bouloux AHC
+p.riviere mc,5,Petite Rivière Mediclinic
+la clinique mauricienne,5,La Clinique Mauricienne
+coromandel medi clinic,5,Coromandel Mediclinic
+ch.grenier ahc,5,Chemin Grenier AHC
+life nova,4,Life Medical Clinic
+fast track jh,4,Dr A. G. Jeetoo Hospital
+unsorted vh,4,Victoria Hospital
+pailles chc,4,Pailles CHC
+clinique bon pasteur,4,Clinique du Bon Pasteur
+albion chc,4,Albion CHC
+-,4,
+clinic bon pasteur,4,Clinique du Bon Pasteur
+odette leal,4,Odette Leal CHC
+petite riv mediclinic,4,Petite Rivière Mediclinic
+jh uns,4,Dr A. G. Jeetoo Hospital
+premium care,4,C-Care
+cmc,4,Coromandel Mediclinic
+c care wellkinn,4,C-Care
+bambous,4,Bambous AHC
+michael leal chc,4,Michael Leal CHC
+wd 3.1 @ dr ag jh,3,Dr A. G. Jeetoo Hospital
+fever survey,3,
+bon pasteur clinic,3,Clinique du Bon Pasteur
+hyderkhan mediclinic,3,Hyderkhan Mediclinic
+jhaed,3,Dr A. G. Jeetoo Hospital
+clab wellkinn,3,C-Lab
+dr yves cantin ahc,3,Yves Cantin CHC
+souillac hospital,3,New Souillac Hospital
+bambou ahc,3,Bambous AHC
+c.grenier ahc,3,Chemin Grenier AHC
+2026-05-11 00:00:00,3,
+beau bassin ahc,3,Beau Bassin AHC
+c-care darney,2,C-Care Darné
+?,2,
+wd 3-2 @ jh,2,Dr A. G. Jeetoo Hospital
+vh ward f11,2,Victoria Hospital
+jnh ward 0-5,2,Jawaharlal Nehru Hospital
+ward 3.1 @ jh,2,Dr A. G. Jeetoo Hospital
+mahebourg hospital,2,Mahebourg Hospital
+mh,2,
+clinique mauritian,2,La Clinique Mauricienne
+health office,2,
+c-care,2,C-Care
+c darne,2,C-Care Darné
+grand bois mediclinic,2,Grand Bois Mediclinic
+coro medi,2,Coromandel Mediclinic
+ssrnh unsorted,2,Sir Seewoosagur Ramgoolam National Hospital
+stanley medi,2,Stanley Mediclinic
+chemin grenier ahc,2,Chemin Grenier AHC
+agjh uns,2,Dr A. G. Jeetoo Hospital
+clinique mauricienne,2,La Clinique Mauricienne
+yve cartin,2,Yves Cantin CHC
+coromendel medi,2,Coromandel Mediclinic
+tmc,2,
+c care grand baie,2,C-Care
+life nova tamarin,2,Life Medical Clinic
+wellkin clinic,2,Wellkin Hospital
+hso p.louis,2,
+wellkinn,2,Wellkin Hospital
+2026-05-10 00:00:00,2,
+coromandel chc,2,Coromandel Mediclinic
+lady twinng ahc,2,Lady Twining AHC
+lmc,2,
+unsorted paed,2,Dr A. G. Jeetoo Hospital
+bambous health office,2,
+quartier militaire mediclinic,2,Quartier Militaire Mediclinic
+saint croix chc,2,Sainte Croix CHC
+darne clinic,2,C-Care Darné
+p8a,1,
+dama,1,
+vh ward 16b,1,Victoria Hospital
+vh ward 4,1,Victoria Hospital
+wd 2.4 @ dr ag jh,1,Dr A. G. Jeetoo Hospital
+ssrnh ed 2-2,1,Sir Seewoosagur Ramgoolam National Hospital
+private doctor,1,
+---,1,
+dr a g jh in ward 3.1,1,Dr A. G. Jeetoo Hospital
+dr a g jh in ward 3.2,1,Dr A. G. Jeetoo Hospital
+rh ahc,1,Rose Hill AHC
+unr,1,
+novalab,1,Novalab
+rhill health office,1,
+darne clab,1,C-Lab
+no,1,
+welkin hospital,1,Wellkin Hospital
+premium care clinic,1,C-Care
+jeetoo hospital(28/02-02/03),1,Dr A. G. Jeetoo Hospital
+unsortted,1,
+will attend jnh today 10 march 2026,1,
+vh medical,1,Victoria Hospital
+vh pead uns,1,Victoria Hospital
+unsortedvh,1,Victoria Hospital
+unsorted ped vh,1,Dr A. G. Jeetoo Hospital
+wellkin hospital room 642,1,Wellkin Hospital
+wellkin hospital nicu,1,Wellkin Hospital
+aed uns,1,Dr A. G. Jeetoo Hospital
+medecin a domicile ebene,1,
+buf,1,
+royal green clinic,1,Royal Green Hospital
+premiun care clinic,1,C-Care
+clab albion,1,C-Lab
+trefles chc,1,Trèfles CHC
+c clab wellkinn,1,C-Lab
+c lab wellkinn,1,C-Lab
+vh unsorted,1,Victoria Hospital
+l'escalier medi clinic,1,L'Escalier Mediclinic
+cpe ahc,1,Curepipe AHC
+saj hospital,1,Sir Anerood Jugnauth Hospital
+cdarne,1,C-Care Darné
+private gp,1,
+agjh a&e,1,Dr A. G. Jeetoo Hospital
+tombeau baie chc,1,Tombeau Bay CHC
+none - dbs taken by hso,1,
+c clab darne,1,C-Care Darné
+cap malheureux chc,1,Cap Malheureux CHC
+jnh unsorted opd,1,Dr A. G. Jeetoo Hospital
+dr a g jeetoo hospital,1,Dr A. G. Jeetoo Hospital
+wellkin level 4,1,Wellkin Hospital
+jh fast tract,1,Dr A. G. Jeetoo Hospital
+lady twinning chc,1,Lady Twining AHC
+cap malheureux,1,Cap Malheureux CHC
+jnh unsorted,1,Jawaharlal Nehru Hospital
+fever watch by mahebourg health office,1,
+agjh wd 3.1,1,Dr A. G. Jeetoo Hospital
+jnh a&e,1,Jawaharlal Nehru Hospital
+lefe,1,
+rphi,1,
+nouvelle clinic du bon pasteur,1,Clinique du Bon Pasteur
+c lab wellkn,1,C-Lab
+fever watch by hso souillac,1,
+life med clinic,1,Life Medical Clinic
+lab villes soeurs,1,Laboratoire des Villes Soeurs
+uns jeetoo,1,Dr A. G. Jeetoo Hospital
+ltk chc,1,
+petite riviere ahc,1,Petite Rivière Mediclinic
+nouvelle clinique du bon pasteur,1,Clinique du Bon Pasteur
+vh c12,1,Victoria Hospital
+vh 16b,1,Victoria Hospital
+life nova plus,1,Life Medical Clinic
+pamplemousses health office,1,
+rhs,1,
+novalab phoenix,1,Novalab
+medisave lab,1,Medisave
+c care mont choisy,1,C-Care
+life forbach,1,Life Medical Clinic
+mediclinic plaine verte,1,Plaine Verte Mediclinic
+qbornes ahc,1,Quatre Bornes AHC
+rose hill ahc,1,Rose Hill AHC
+laboratoire des villes soeurs,1,Laboratoire des Villes Soeurs
+life medical clinic bon pasteur,1,Life Medical Clinic
+c-care darne,1,C-Care Darné
+hso,1,
+vh 03 may 2026,1,
+smc 03 may 2026,1,
+"life nova plus, tamarin",1,Life Medical Clinic
+"c care, moka",1,C-Care
+"c care, grand bay",1,C-Care
+health office- contact,1,
+lescalier mc,1,L'Escalier Mediclinic
+seen by hso on 05 may 26,1,
+ag jh,1,Dr A. G. Jeetoo Hospital
+aed dr ag jh,1,Dr A. G. Jeetoo Hospital
+st pierre lhc,1,St Pierre LHC
+paeds ft,1,Dr A. G. Jeetoo Hospital
+odelette leal chc,1,Odette Leal CHC
+floreal mediclinic,1,Floréal Mediclinic
+yues cantin chc,1,Yves Cantin CHC
+"private gp,test done at c lab",1,
+long mountain hospital,1,Long Mountain Hospital
+odette chc,1,Odette Leal CHC
+test done by hso during fever survey,1,
+r.hill ahc,1,Rose Hill AHC
+c care welkin,1,C-Care
+yves cantin,1,Yves Cantin CHC
+paeds opd jh,1,Dr A. G. Jeetoo Hospital
+ward 2-2,1,
+l'escalier mc,1,L'Escalier Mediclinic
+hyderkhan mc,1,Hyderkhan Mediclinic
+medisave clinic,1,Medisave
+city clinic grand baie,1,City Clinic
+goodlands mediclinic,1,Goodlands Mediclinic
+gmc,1,
+phi did test,1,
+jnh-unsorted,1,Jawaharlal Nehru Hospital
+rose belle hso,1,
+vh paeds,1,Victoria Hospital
+jh 1.1,1,Dr A. G. Jeetoo Hospital
+clc chc,1,
+artemis hospital,1,Artemis Hospital
+"vh, wellkin hospital",1,Victoria Hospital
+pailles east chc,1,Pailles CHC
+curepipe health office,1,
+vh lab,1,Victoria Hospital
+biosante,1,Biosanté Laboratory
+agkh uns,1,Dr A. G. Jeetoo Hospital
+c grenier ahc,1,Chemin Grenier AHC
+unsorted opd jnh,1,Dr A. G. Jeetoo Hospital
+coromandal mc,1,Coromandel Mediclinic
+phoenix chc,1,Phoenix CHC
+city clinic p.louis,1,City Clinic
+coramandel mediclinic,1,Coromandel Mediclinic
+2026-05-13 00:00:00,1,
+jh ward 3-6,1,Dr A. G. Jeetoo Hospital
+health office plouis,1,
+ssrnh ward 2-1,1,Sir Seewoosagur Ramgoolam National Hospital
+bel air riv seche mediclinic,1,Bel Air Mediclinic
+artemis hosp,1,Artemis Hospital
+"c lab wellkin hospital, moka",1,C-Lab
+c lab cdarne,1,C-Care Darné
+laboratoire medical des ville soeurs,1,Laboratoire des Villes Soeurs
+tombeau bay chc,1,Tombeau Bay CHC
+fast track agjh,1,Dr A. G. Jeetoo Hospital
+lab medisave quatre bornes,1,Medisave
+admitted icu,1,
+admitted 3.5,1,
+fast tract,1,Dr A. G. Jeetoo Hospital
+fever watch by pl ho,1,
+na,1,
+bel air mediclinic,1,Bel Air Mediclinic
