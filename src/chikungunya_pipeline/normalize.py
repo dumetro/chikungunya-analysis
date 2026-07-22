@@ -52,6 +52,7 @@ ENTITY_SPECS: dict[str, EntitySpec] = {
     "comorbidity": EntitySpec(
         "comorbidity", "comorbidities", "comorbidity_raw_map", multivalue=True
     ),
+    "facility": EntitySpec("facility", "healthfacilities", "healthfacility_raw_map"),
 }
 
 
