@@ -1,0 +1,185 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "id": "0",
+      "type": "Feature",
+      "properties": {
+        "name": "Agaléga",
+        "layerName": "District Labels (Names and Case Counts)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          56.643030841491786,
+          -10.41606446426755
+        ]
+      }
+    },
+    {
+      "id": "1",
+      "type": "Feature",
+      "properties": {
+        "name": "Saint Brandon",
+        "layerName": "District Labels (Names and Case Counts)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          59.585594774347655,
+          -16.555295750540218
+        ]
+      }
+    },
+    {
+      "id": "2",
+      "type": "Feature",
+      "properties": {
+        "name": "Rodrigues",
+        "layerName": "District Labels (Names and Case Counts)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          63.39070620383855,
+          -19.73585651053444
+        ]
+      }
+    },
+    {
+      "id": "3",
+      "type": "Feature",
+      "properties": {
+        "name": "Black River",
+        "layerName": "District Labels (Names and Case Counts)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          57.406471697234565,
+          -20.329540487432034
+        ]
+      }
+    },
+    {
+      "id": "4",
+      "type": "Feature",
+      "properties": {
+        "name": "Pamplemousses",
+        "layerName": "District Labels (Names and Case Counts)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          57.571387840899725,
+          -20.10499242170035
+        ]
+      }
+    },
+    {
+      "id": "5",
+      "type": "Feature",
+      "properties": {
+        "name": "Flacq",
+        "layerName": "District Labels (Names and Case Counts)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          57.714994582224236,
+          -20.22729450218384
+        ]
+      }
+    },
+    {
+      "id": "6",
+      "type": "Feature",
+      "properties": {
+        "name": "Moka",
+        "layerName": "District Labels (Names and Case Counts)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          57.5828208657548,
+          -20.250418031314428
+        ]
+      }
+    },
+    {
+      "id": "7",
+      "type": "Feature",
+      "properties": {
+        "name": "Rivière du Rempart District",
+        "layerName": "District Labels (Names and Case Counts)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          57.65284213178821,
+          -20.056757936869364
+        ]
+      }
+    },
+    {
+      "id": "8",
+      "type": "Feature",
+      "properties": {
+        "name": "Savanne",
+        "layerName": "District Labels (Names and Case Counts)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          57.49798897752756,
+          -20.465173926930845
+        ]
+      }
+    },
+    {
+      "id": "9",
+      "type": "Feature",
+      "properties": {
+        "name": "Port Louis",
+        "layerName": "District Labels (Names and Case Counts)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          57.51722805158037,
+          -20.16818927133325
+        ]
+      }
+    },
+    {
+      "id": "10",
+      "type": "Feature",
+      "properties": {
+        "name": "Grand Port",
+        "layerName": "District Labels (Names and Case Counts)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          57.65159411855811,
+          -20.394883120787007
+        ]
+      }
+    },
+    {
+      "id": "11",
+      "type": "Feature",
+      "properties": {
+        "name": "Plaines Wilhems",
+        "layerName": "District Labels (Names and Case Counts)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          57.4984846746519,
+          -20.319095965882195
+        ]
+      }
+    }
+  ]
+}

@@ -10,7 +10,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from data_access import REGION_TO_DISTRICT, apply_filters, load_cases
+from data_access import apply_filters, load_cases
 from filters import sidebar_filters
 from theme import who_style as who
 
@@ -20,10 +20,7 @@ who.top_nav(active="Geographic")
 who.header("Geographic Distribution", "Cases by health region, locality and origin",
            eyebrow="Where")
 
-# REGION_TO_DISTRICT (MoH health region -> district, matching the geojson
-# `province` field) is shared from data_access. health_region is the surveillance
-# zone; health_office is a referral/testing hub, not a reliable geographic key.
-GEOJSON_PATH = Path(__file__).resolve().parents[2] / "data" / "geodata" / "mauritius_adm1.json"
+GEODATA = Path(__file__).resolve().parents[2] / "data" / "geodata"
 
 
 @st.cache_data(show_spinner=False)
@@ -35,94 +32,117 @@ def _load_geojson(path: str) -> dict | None:
 df = load_cases()
 fdf = apply_filters(df, sidebar_filters(df))
 
-# --- Choropleth: cases by district ----------------------------------------
-who.section("Case map by district", "Geographic intensity")
-CLS_ORDER = ["Confirmed", "Probable", "Suspected", "Unclassified"]
-CLS_MARKER = {"Confirmed": "🔴", "Probable": "🟠", "Suspected": "🔵",
-              "Unclassified": "⚪"}
-OUTER_ISLANDS = {"CARGADOS CARAJOS)", "ÎLE RODRIGUES", "ÎLES AGALÉGA"}
+# --- Graduated-symbol map: district case volume -----------------------------
+# Renders the curated July-2026 geodata layers (data/geodata/): a graduated
+# symbol per district, area-proportional to case volume, over district outlines
+# with name+count labels. This uses the locality-geocoded district attribution
+# baked into the geodata rather than the health_region→district surveillance
+# mapping (health_region is the reporting zone, not residence).
+who.section("Case map by district", "Graduated symbols — outbreak intensity")
+
+OUTER_ISLANDS = {"Agaléga", "Saint Brandon", "Rodrigues"}
+# Intensity classes (legend order) and fill colours, matching the curated risk
+# layers in data/geodata/ (very_high=red … minimal=light-yellow).
+INTENSITY_ORDER = ["Very High", "High", "Moderate", "Low", "Minimal"]
+INTENSITY_COLOR = {"Very High": "#FF0000", "High": "#FFA500", "Moderate": "#FFA500",
+                   "Low": "#FFFF00", "Minimal": "#FFFFE0"}
 
 
-def _centroid(geom: dict) -> tuple[float, float]:
-    """Lon/lat centroid of a feature's largest ring (for label placement)."""
-    rings = ([geom["coordinates"][0]] if geom["type"] == "Polygon"
-             else [poly[0] for poly in geom["coordinates"]])
-    ring = max(rings, key=len)
-    xs = [p[0] for p in ring]
-    ys = [p[1] for p in ring]
-    return sum(xs) / len(xs), sum(ys) / len(ys)
+def _polylines(geom: dict | None):
+    """Yield (lons, lats) for each part of a LineString / MultiLineString."""
+    if not geom:
+        return
+    segs = ([geom["coordinates"]] if geom["type"] == "LineString"
+            else geom["coordinates"] if geom["type"] == "MultiLineString" else [])
+    for seg in segs:
+        yield [p[0] for p in seg], [p[1] for p in seg]
 
 
-geo = _load_geojson(str(GEOJSON_PATH))
-if geo is None:
-    st.info(f"District boundaries not found at {GEOJSON_PATH.name}. "
-            "Add the GeoJSON to data/geodata/ to enable the map.")
-elif "health_region" in fdf.columns and not fdf.empty:
-    mainland = [f["properties"]["province"] for f in geo["features"]
-                if f["properties"]["province"] not in OUTER_ISLANDS]
-    mdf = fdf.copy()
-    mdf["district"] = mdf["health_region"].map(REGION_TO_DISTRICT)
-    mdf["case_classification"] = mdf["case_classification"].fillna("Unclassified")
-    # Counts per district x classification, every mainland district present (0-filled).
-    ct = (pd.crosstab(mdf["district"], mdf["case_classification"])
-          .reindex(index=mainland, columns=CLS_ORDER, fill_value=0)
-          .fillna(0).astype(int))
-    ct["total"] = ct[CLS_ORDER].sum(axis=1)
-    agg = ct.reset_index()
+symbols = _load_geojson(str(GEODATA / "district_case_volume__graduated_symbols_.geojson"))
+outlines = _load_geojson(str(GEODATA / "district_boundaries__outlines_only_.geojson"))
+labels = _load_geojson(str(GEODATA / "district_labels__names_and_case_counts_.geojson"))
 
-    # Choroplethmapbox (NOT the geo choropleth, which mis-fills these polygons
-    # due to ring winding order). White basemap + white→red scale so zero
-    # districts read as white; per-classification breakdown lives in the hover.
-    fig = go.Figure(go.Choroplethmapbox(
-        geojson=geo, locations=agg["district"], featureidkey="properties.province",
-        z=agg["total"], zmin=0, zmax=int(agg["total"].max()) or 1,
-        colorscale=[[0, "#ffffff"], [0.25, "#FEB24C"], [0.6, "#FC4E2A"],
-                    [1, "#BD0026"]],
-        customdata=agg[CLS_ORDER].to_numpy(),
-        marker_line_color="#3a3a3a", marker_line_width=1,
-        colorbar=dict(title="Cases"),
-        hovertemplate=(
-            "<b>%{location}</b><br>Total: %{z}<br>"
-            "🔴 Confirmed: %{customdata[0]}<br>🟠 Probable: %{customdata[1]}<br>"
-            "🔵 Suspected: %{customdata[2]}<br>⚪ Unclassified: %{customdata[3]}"
-            "<extra></extra>"),
-    ))
-    # On-map labels: district name only (counts are in the hover tooltip).
-    lons, lats, names = [], [], []
-    for feat in geo["features"]:
-        name = feat["properties"]["province"]
-        if name not in mainland:
+if symbols is None:
+    st.info("Graduated-symbol geodata not found. Add "
+            "district_case_volume__graduated_symbols_.geojson to data/geodata/.")
+else:
+    # District centroids (from the labels layer) anchor both bubbles and labels.
+    centroid = {f["properties"]["name"]: f["geometry"]["coordinates"]
+                for f in (labels or {}).get("features", []) if f.get("geometry")}
+
+    fig = go.Figure()
+
+    # 1) District outlines — mainland only, drawn as a single line trace.
+    if outlines:
+        olon, olat = [], []
+        for feat in outlines["features"]:
+            if feat["properties"]["name"] in OUTER_ISLANDS:
+                continue
+            for lons, lats in _polylines(feat["geometry"]):
+                olon += lons + [None]
+                olat += lats + [None]
+        fig.add_trace(go.Scattermapbox(
+            lon=olon, lat=olat, mode="lines", line=dict(color="#9aa5b1", width=1),
+            hoverinfo="skip", showlegend=False, name="Districts"))
+
+    # 2) Graduated symbols — collect mainland districts with cases.
+    rows = []  # (intensity, name, cases, lon, lat)
+    for feat in symbols["features"]:
+        p = feat["properties"]
+        name = p["name"]
+        if name in OUTER_ISLANDS or int(p.get("cases", 0)) <= 0:
             continue
-        lon, lat = _centroid(feat["geometry"])
-        lons.append(lon)
-        lats.append(lat)
-        names.append(name.title())
+        lonlat = centroid.get(name)
+        if not lonlat:
+            continue
+        display = name.replace(" District", "").strip()
+        rows.append((p.get("intensity", "Minimal"), display, int(p["cases"]),
+                     lonlat[0], lonlat[1]))
+
+    max_cases = max((r[2] for r in rows), default=1)
+    sizeref = 2.0 * max_cases / (58.0 ** 2)  # area-proportional graduated symbols
+
+    # one trace per intensity class so each shows in the legend with its colour
+    for intensity in INTENSITY_ORDER:
+        grp = [r for r in rows if r[0] == intensity]
+        if not grp:
+            continue
+        fig.add_trace(go.Scattermapbox(
+            lon=[r[3] for r in grp], lat=[r[4] for r in grp], mode="markers",
+            marker=dict(size=[r[2] for r in grp], sizemode="area", sizeref=sizeref,
+                        sizemin=6, color=INTENSITY_COLOR[intensity], opacity=0.82),
+            name=intensity, customdata=[[r[1], r[2]] for r in grp],
+            hovertemplate=("<b>%{customdata[0]}</b><br>%{customdata[1]:,} cases"
+                           f"<br>Intensity: {intensity}<extra></extra>")))
+
+    # 3) On-map labels: district name + case count.
     fig.add_trace(go.Scattermapbox(
-        lon=lons, lat=lats, text=names, mode="text",
-        textfont=dict(size=11, color="#111111"),
-        showlegend=False, hoverinfo="skip",
-    ))
+        lon=[r[3] for r in rows], lat=[r[4] for r in rows], mode="text",
+        text=[f"{r[1]}<br>{r[2]:,}" for r in rows],
+        textfont=dict(size=10, color="#1a1a1a"), hoverinfo="skip", showlegend=False))
+
     fig.update_layout(
         mapbox_style="white-bg",
         mapbox_center={"lat": -20.28, "lon": 57.55}, mapbox_zoom=9.2,
         margin=dict(l=0, r=0, t=0, b=0), height=620,
-    )
+        legend=dict(title="Intensity", orientation="h", yanchor="bottom", y=0.01,
+                    xanchor="left", x=0.01, bgcolor="rgba(255,255,255,0.75)"))
     st.plotly_chart(fig, use_container_width=True)
     st.caption(
-        "District shading = total reported cases (white = none). Hover a district "
-        "for the classification breakdown (Confirmed / Probable / Suspected / "
-        "Unclassified). Moka and Regions 6–8 (Savanne, Black River, Plaines "
-        "Wilhems) have no cases yet.")
+        "Graduated symbols: bubble **area** ∝ reported case volume per district, "
+        "coloured by outbreak intensity (Very High → Minimal). Source: curated "
+        "July 2026 geodata (`data/geodata/`), locality-geocoded to district — a "
+        "fixed snapshot, independent of the sidebar filter. Outer islands "
+        "(Agaléga, Saint Brandon, Rodrigues) have no cases and are omitted.")
     who.notes(
-        "Choropleth of total reported cases by district, with the classification "
-        "breakdown on hover.",
-        "Cases are placed via the `health_region`→district mapping onto the "
-        "bundled Mauritius GeoJSON, so it needs `health_region` populated. Only "
-        "Regions 1–5 have data today (others render white/0). If health-region "
-        "definitions or the boundary file change, update `REGION_TO_DISTRICT` / "
-        "the GeoJSON. This is region-of-report, not residence.")
-else:
-    st.info("Needs the health_region column — not available for the current filter.")
+        "A graduated-symbol map of district case volume for the July 2026 outbreak "
+        "snapshot: Plaines Wilhems is the epicentre, with Port Louis and Black "
+        "River as secondary foci.",
+        "Renders the bundled geodata layers (graduated symbols + district outlines "
+        "+ labels). Bubble size is area-proportional (√-scaled) to `cases`; colours "
+        "follow the geodata intensity scheme. This map is fixed to the geodata "
+        "snapshot and does not respond to the sidebar filter; the live charts below "
+        "do. It intentionally replaces the choropleth (no fill shading).")
 
 st.divider()
 

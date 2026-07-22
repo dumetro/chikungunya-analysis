@@ -1,0 +1,145 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "id": "0",
+      "type": "Feature",
+      "properties": {
+        "layerName": "Aedes albopictus Hotspots (Blue)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          57.4613117,
+          -20.2491911
+        ]
+      }
+    },
+    {
+      "id": "1",
+      "type": "Feature",
+      "properties": {
+        "layerName": "Aedes albopictus Hotspots (Blue)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          57.455655,
+          -20.2348653
+        ]
+      }
+    },
+    {
+      "id": "2",
+      "type": "Feature",
+      "properties": {
+        "layerName": "Aedes albopictus Hotspots (Blue)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          57.455655,
+          -20.2427576
+        ]
+      }
+    },
+    {
+      "id": "3",
+      "type": "Feature",
+      "properties": {
+        "layerName": "Aedes albopictus Hotspots (Blue)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          57.468383,
+          -20.2230305
+        ]
+      }
+    },
+    {
+      "id": "4",
+      "type": "Feature",
+      "properties": {
+        "layerName": "Aedes albopictus Hotspots (Blue)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          57.4796981,
+          -20.2674718
+        ]
+      }
+    },
+    {
+      "id": "5",
+      "type": "Feature",
+      "properties": {
+        "layerName": "Aedes albopictus Hotspots (Blue)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          57.502332,
+          -20.1247978
+        ]
+      }
+    },
+    {
+      "id": "6",
+      "type": "Feature",
+      "properties": {
+        "layerName": "Aedes albopictus Hotspots (Blue)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          57.5886687,
+          -19.9990745
+        ]
+      }
+    },
+    {
+      "id": "7",
+      "type": "Feature",
+      "properties": {
+        "layerName": "Aedes albopictus Hotspots (Blue)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          57.468383,
+          -20.4967315
+        ]
+      }
+    },
+    {
+      "id": "8",
+      "type": "Feature",
+      "properties": {
+        "layerName": "Aedes albopictus Hotspots (Blue)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          57.5575802,
+          -20.4844121
+        ]
+      }
+    },
+    {
+      "id": "9",
+      "type": "Feature",
+      "properties": {
+        "layerName": "Aedes albopictus Hotspots (Blue)"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          57.7268131,
+          -20.4299023
+        ]
+      }
+    }
+  ]
+}
