@@ -41,11 +41,37 @@ fdf = apply_filters(df, sidebar_filters(df))
 who.section("Case map by district", "Graduated symbols — outbreak intensity")
 
 OUTER_ISLANDS = {"Agaléga", "Saint Brandon", "Rodrigues"}
-# Intensity classes (legend order) and fill colours, matching the curated risk
-# layers in data/geodata/ (very_high=red … minimal=light-yellow).
-INTENSITY_ORDER = ["Very High", "High", "Moderate", "Low", "Minimal"]
-INTENSITY_COLOR = {"Very High": "#FF0000", "High": "#FFA500", "Moderate": "#FFA500",
-                   "Low": "#FFFF00", "Minimal": "#FFFFE0"}
+# Earth-AI-style glow palette: translucent bubbles with bright cores over a
+# satellite basemap, with lavender district outlines. Bubbles are coloured by
+# case intensity on a red → orange → yellow ramp.
+INTENSITY_COLOR = {
+    "Very High": "#E8112D",   # red
+    "High": "#FF5A00",        # orange-red
+    "Moderate": "#FF9500",    # orange
+    "Low": "#FFC400",         # amber
+    "Minimal": "#FFE873",     # yellow
+}
+CORE_HALO = "#FFF3D6"     # warm-white halo behind each core
+PIN = "#FFFFFF"           # bright core pin
+LABEL = "#FFF3D6"         # on-map label text
+OUTLINE = "rgba(206,168,255,0.72)"   # lavender district boundaries
+
+
+def _intensity_color(intensity: str | None, cases: int, max_cases: int) -> str:
+    """Red→orange→yellow by intensity class, falling back to case-volume bins."""
+    if intensity in INTENSITY_COLOR:
+        return INTENSITY_COLOR[intensity]
+    frac = cases / max_cases if max_cases else 0
+    return "#E8112D" if frac >= 0.6 else "#FF9500" if frac >= 0.25 else "#FFC400"
+# ESRI World Imagery satellite tiles — no Mapbox token required.
+_SAT_LAYER = {
+    "below": "traces", "sourcetype": "raster", "sourceattribution": "Esri, Maxar",
+    "source": ["https://server.arcgisonline.com/ArcGIS/rest/services/"
+               "World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+}
+# Concentric glow layers per district: (diameter × factor, opacity), faint+wide
+# to opaque+tight, so overlap builds a soft radial gradient toward the centre.
+_GLOW_LAYERS = [(2.2, 0.06), (1.7, 0.11), (1.25, 0.23), (1.0, 0.50)]
 
 
 def _polylines(geom: dict | None):
@@ -70,22 +96,7 @@ else:
     centroid = {f["properties"]["name"]: f["geometry"]["coordinates"]
                 for f in (labels or {}).get("features", []) if f.get("geometry")}
 
-    fig = go.Figure()
-
-    # 1) District outlines — mainland only, drawn as a single line trace.
-    if outlines:
-        olon, olat = [], []
-        for feat in outlines["features"]:
-            if feat["properties"]["name"] in OUTER_ISLANDS:
-                continue
-            for lons, lats in _polylines(feat["geometry"]):
-                olon += lons + [None]
-                olat += lats + [None]
-        fig.add_trace(go.Scattermapbox(
-            lon=olon, lat=olat, mode="lines", line=dict(color="#9aa5b1", width=1),
-            hoverinfo="skip", showlegend=False, name="Districts"))
-
-    # 2) Graduated symbols — collect mainland districts with cases.
+    # Mainland districts with cases.
     rows = []  # (intensity, name, cases, lon, lat)
     for feat in symbols["features"]:
         p = feat["properties"]
@@ -99,50 +110,83 @@ else:
         rows.append((p.get("intensity", "Minimal"), display, int(p["cases"]),
                      lonlat[0], lonlat[1]))
 
-    max_cases = max((r[2] for r in rows), default=1)
-    sizeref = 2.0 * max_cases / (58.0 ** 2)  # area-proportional graduated symbols
+    fig = go.Figure()
 
-    # one trace per intensity class so each shows in the legend with its colour
-    for intensity in INTENSITY_ORDER:
-        grp = [r for r in rows if r[0] == intensity]
-        if not grp:
-            continue
+    # 1) District outlines (lavender), beneath the glow.
+    if outlines:
+        olon, olat = [], []
+        for feat in outlines["features"]:
+            if feat["properties"]["name"] in OUTER_ISLANDS:
+                continue
+            for lons, lats in _polylines(feat["geometry"]):
+                olon += lons + [None]
+                olat += lats + [None]
         fig.add_trace(go.Scattermapbox(
-            lon=[r[3] for r in grp], lat=[r[4] for r in grp], mode="markers",
-            marker=dict(size=[r[2] for r in grp], sizemode="area", sizeref=sizeref,
-                        sizemin=6, color=INTENSITY_COLOR[intensity], opacity=0.82),
-            name=intensity, customdata=[[r[1], r[2]] for r in grp],
-            hovertemplate=("<b>%{customdata[0]}</b><br>%{customdata[1]:,} cases"
-                           f"<br>Intensity: {intensity}<extra></extra>")))
+            lon=olon, lat=olat, mode="lines", line=dict(color=OUTLINE, width=1.3),
+            hoverinfo="skip", showlegend=False))
 
-    # 3) On-map labels: district name + case count.
-    fig.add_trace(go.Scattermapbox(
-        lon=[r[3] for r in rows], lat=[r[4] for r in rows], mode="text",
-        text=[f"{r[1]}<br>{r[2]:,}" for r in rows],
-        textfont=dict(size=10, color="#1a1a1a"), hoverinfo="skip", showlegend=False))
+    # 2) Graduated glow symbols. Body diameter (px) is √-scaled to case volume;
+    #    stacked translucent teal layers + a bright core give the Earth-AI glow.
+    if rows:
+        max_cases = max(r[2] for r in rows)
+        lons = [r[3] for r in rows]
+        lats = [r[4] for r in rows]
+        cols = [_intensity_color(r[0], r[2], max_cases) for r in rows]
+        body = [max(28.0, min(104.0, (r[2] / max_cases) ** 0.5 * 104.0)) for r in rows]
+        core = [max(9.0, min(18.0, d * 0.22)) for d in body]
+
+        for factor, op in _GLOW_LAYERS:
+            fig.add_trace(go.Scattermapbox(
+                lon=lons, lat=lats, mode="markers",
+                marker=dict(size=[d * factor for d in body], color=cols, opacity=op),
+                hoverinfo="skip", showlegend=False))
+
+        # warm-white halo behind the cores, for the bright bloom
+        fig.add_trace(go.Scattermapbox(
+            lon=lons, lat=lats, mode="markers",
+            marker=dict(size=[c * 2.2 for c in core], color=CORE_HALO, opacity=0.55),
+            hoverinfo="skip", showlegend=False))
+        # bright core pin — carries the hover tooltip
+        fig.add_trace(go.Scattermapbox(
+            lon=lons, lat=lats, mode="markers",
+            marker=dict(size=[max(5.0, c * 0.9) for c in core], color=PIN, opacity=0.95),
+            customdata=[[r[1], r[2], r[0]] for r in rows],
+            hovertemplate=("<b>%{customdata[0]}</b><br>%{customdata[1]:,} cases"
+                           "<br>Intensity: %{customdata[2]}<extra></extra>"),
+            showlegend=False))
+        # labels: district name + count, nudged north of the core (plain text —
+        # mapbox labels don't render HTML tags, only <br>)
+        fig.add_trace(go.Scattermapbox(
+            lon=lons, lat=[la + 0.014 for la in lats], mode="text",
+            text=[f"{r[1]}<br>{r[2]:,}" for r in rows],
+            textfont=dict(size=11, color=LABEL, family="Arial"),
+            hoverinfo="skip", showlegend=False))
 
     fig.update_layout(
-        mapbox_style="white-bg",
-        mapbox_center={"lat": -20.28, "lon": 57.55}, mapbox_zoom=9.2,
-        margin=dict(l=0, r=0, t=0, b=0), height=620,
-        legend=dict(title="Intensity", orientation="h", yanchor="bottom", y=0.01,
-                    xanchor="left", x=0.01, bgcolor="rgba(255,255,255,0.75)"))
+        mapbox_style="white-bg", mapbox_layers=[_SAT_LAYER],
+        mapbox_center={"lat": -20.30, "lon": 57.57}, mapbox_zoom=9.55,
+        margin=dict(l=0, r=0, t=0, b=0), height=700, showlegend=False,
+        paper_bgcolor="#0a0f1c")
     st.plotly_chart(fig, use_container_width=True)
     st.caption(
-        "Graduated symbols: bubble **area** ∝ reported case volume per district, "
-        "coloured by outbreak intensity (Very High → Minimal). Source: curated "
-        "July 2026 geodata (`data/geodata/`), locality-geocoded to district — a "
-        "fixed snapshot, independent of the sidebar filter. Outer islands "
-        "(Agaléga, Saint Brandon, Rodrigues) have no cases and are omitted.")
+        "Graduated symbols: bubble **size** ∝ reported case volume per district, "
+        "**coloured by case intensity** (🔴 red = Very High → 🟠 orange → 🟡 yellow "
+        "= Low), over an Esri satellite basemap. Plaines Wilhems is the red "
+        "epicentre. Source: curated July 2026 geodata (`data/geodata/`, generated "
+        "with Google Earth AI), locality-geocoded to district — a fixed snapshot, "
+        "independent of the sidebar filter. Outer islands (Agaléga, Saint Brandon, "
+        "Rodrigues) have no cases and are omitted.")
     who.notes(
         "A graduated-symbol map of district case volume for the July 2026 outbreak "
-        "snapshot: Plaines Wilhems is the epicentre, with Port Louis and Black "
-        "River as secondary foci.",
+        "snapshot, styled after the Google Earth AI visualisation: Plaines Wilhems "
+        "is the epicentre, with Port Louis and Black River as secondary foci.",
         "Renders the bundled geodata layers (graduated symbols + district outlines "
-        "+ labels). Bubble size is area-proportional (√-scaled) to `cases`; colours "
-        "follow the geodata intensity scheme. This map is fixed to the geodata "
-        "snapshot and does not respond to the sidebar filter; the live charts below "
-        "do. It intentionally replaces the choropleth (no fill shading).")
+        "+ labels) generated with Google Earth AI, over Esri World Imagery satellite "
+        "tiles (external; needs network). Bubble diameter is √-scaled to `cases` and "
+        "the glow is coloured by intensity class on a red→orange→yellow ramp "
+        "(stacked translucent layers); hover gives the exact count and class. Fixed "
+        "to the geodata snapshot — it does not respond to the sidebar filter (the "
+        "live charts below do).")
 
 st.divider()
 

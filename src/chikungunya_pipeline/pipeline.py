@@ -251,6 +251,9 @@ def run_pipeline(
     result.inserted = load_result.n_inserted
     result.skipped_duplicate = load_result.n_skipped_duplicate
     result.load_failed = load_result.n_failed
+    if load_result.n_log_reconciled:
+        emit(f"      reconciled stale idempotency log: cleared "
+             f"{load_result.n_log_reconciled} orphaned hash(es) (target table was empty)")
     emit(f"      inserted={load_result.n_inserted}  "
          f"skipped_duplicate={load_result.n_skipped_duplicate}  failed={load_result.n_failed}")
 
