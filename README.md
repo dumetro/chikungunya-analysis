@@ -87,8 +87,8 @@ returning a `datetime.date` (ISO `YYYY-MM-DD`) or `None`. Day-first by default
 `make app` (or `streamlit run app/Home.py`). Pages:
 **Home** (KPIs, epi curve, local/imported) · **Epi Curve** · **Demographics**
 (age-sex pyramid, nationality, occupation) · **Clinical** (symptoms, comorbidities,
-PCR, outcomes) · **Geographic** (region/locality, local vs imported) ·
-**Data Quality** (latest GX run, rejects, unmapped values).
+PCR, outcomes) · **Spatial Analysis** (interactive outbreak map, region/locality,
+local vs imported) · **Data Quality** (latest GX run, rejects, unmapped values).
 
 ## Outputs & review
 

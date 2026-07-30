@@ -199,7 +199,7 @@ NAV_PAGES = [
     ("/Surveillance", "Surveillance"),
     ("/Demographics", "Demographics"),
     ("/Clinical", "Clinical"),
-    ("/Geographic", "Geographic"),
+    ("/Spatial_Analysis", "Spatial Analysis"),
     ("/Data_Quality", "Data Quality"),
     ("/Data_Lineage", "Data Lineage"),
 ]

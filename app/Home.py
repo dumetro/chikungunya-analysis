@@ -20,6 +20,7 @@ from data_access import (
     parse_epi_week,
 )
 from filters import sidebar_filters
+from components import rolling_case_panel
 from theme import who_style as who
 
 st.set_page_config(page_title="Chikungunya Surveillance", page_icon="🦟", layout="wide")
@@ -56,6 +57,12 @@ c2.metric("PCR positive", f"{k['pcr_positive']:,}")
 c3.metric("PCR positivity", f"{k['pcr_positivity_pct']}%")
 c4.metric("Admitted", f"{k['admitted']:,}")
 c5.metric("Case fatality", f"{k['cfr_pct']}%")
+
+st.divider()
+
+# --- Rolling case windows (24h / 3d / 7d) ----------------------------------
+who.section("Rolling case windows", "Recent activity")
+rolling_case_panel(fdf, show_chart=False, key="home_roll")
 
 st.divider()
 

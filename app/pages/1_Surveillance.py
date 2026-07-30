@@ -15,6 +15,7 @@ from data_access import (
     parse_epi_week,
 )
 from filters import sidebar_filters
+from components import case_forecast_section, rolling_case_panel
 from theme import who_style as who
 
 st.set_page_config(page_title="Surveillance", page_icon="📈", layout="wide")
@@ -72,6 +73,12 @@ else:
 
 st.divider()
 
+# --- Rolling case windows (24h / 3d / 7d) ----------------------------------
+who.section("Rolling case windows", "Recent activity")
+rolling_case_panel(fdf, show_chart=True, key="surv_roll")
+
+st.divider()
+
 freq_label = st.radio("Time resolution", ["Weekly", "Daily"], horizontal=True)
 rule = "W" if freq_label == "Weekly" else "D"
 
@@ -116,6 +123,16 @@ who.notes(
     "Same date-completeness dependency as the curve above; because it accumulates, "
     "missing or late-entered dates flatten or shift the line. Re-running the "
     "pipeline after dates are back-filled will revise it.")
+
+st.divider()
+
+# --- Case-progression forecast ---------------------------------------------
+who.section("Case-progression forecast", "Next 3 months")
+horizon = st.slider("Forecast horizon (weeks)", min_value=6, max_value=20,
+                    value=13, key="fc_horizon")
+case_forecast_section(fdf, horizon_weeks=horizon, key="surv_fc")
+
+st.divider()
 
 # --- Cumulative confirmed cases by epi week --------------------------------
 if {"epi_week", "case_classification"} <= set(fdf.columns):
