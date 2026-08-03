@@ -64,6 +64,7 @@ class LoadResult:
     source_file: str
     n_failed: int = 0
     failures: "pd.DataFrame | None" = None  # failed rows + 'load_error' column
+    n_log_reconciled: int = 0  # stale idempotency-log hashes cleared before load
 
 
 def _target_columns(engine: Engine) -> list[str]:
@@ -150,12 +151,30 @@ def load_dataframe(
     columns = _target_columns(engine)
     insert_cols = [c for c in columns if c in df.columns]
     hash_columns = [c for c in columns if c not in _DERIVED]
+    reconciled = 0
 
     with engine.begin() as conn:
         conn.execute(text(_CREATE_LOG))
         if mode == "replace":
             conn.execute(text(f"TRUNCATE TABLE public.{TARGET_TABLE} RESTART IDENTITY CASCADE"))
             conn.execute(text(f"TRUNCATE TABLE public.{LOG_TABLE}"))
+        else:
+            # Self-heal a stale idempotency log. The log and the target table are
+            # only guaranteed consistent when both are truncated together (replace
+            # mode). If the table was emptied out-of-band (manual TRUNCATE/DELETE,
+            # or a DROP+recreate from the DDL scripts) the log's hashes survive and
+            # would wrongly mark every incoming row a duplicate — silently skipping
+            # the whole load. An empty table can hold no duplicates, so any leftover
+            # hashes are stale: clear them so append mode reloads cleanly.
+            n_target = conn.execute(
+                text(f"SELECT count(*) FROM public.{TARGET_TABLE}")
+            ).scalar()
+            n_log = conn.execute(
+                text(f"SELECT count(*) FROM public.{LOG_TABLE}")
+            ).scalar()
+            if n_target == 0 and n_log:
+                conn.execute(text(f"TRUNCATE TABLE public.{LOG_TABLE}"))
+                reconciled = int(n_log)
 
         existing = {
             r[0] for r in conn.execute(text(f"SELECT load_hash FROM public.{LOG_TABLE}"))
@@ -202,4 +221,5 @@ def load_dataframe(
         source_file=source_file,
         n_failed=len(failures),
         failures=failures_df,
+        n_log_reconciled=reconciled,
     )
