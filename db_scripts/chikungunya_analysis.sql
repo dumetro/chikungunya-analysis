@@ -2,6 +2,8 @@
 
 -- DROP TABLE IF EXISTS public.chikungunya_analysis;
 
+CREATE SEQUENCE IF NOT EXISTS public.chikungunya_analysis_id_seq;
+
 CREATE TABLE IF NOT EXISTS public.chikungunya_analysis
 (
     id integer NOT NULL DEFAULT nextval('chikungunya_analysis_id_seq'::regclass),
@@ -50,6 +52,9 @@ CREATE TABLE IF NOT EXISTS public.chikungunya_analysis
 )
 
 TABLESPACE pg_default;
+
+ALTER SEQUENCE public.chikungunya_analysis_id_seq
+    OWNED BY public.chikungunya_analysis.id;
 
 ALTER TABLE IF EXISTS public.chikungunya_analysis
     OWNER to postgres;

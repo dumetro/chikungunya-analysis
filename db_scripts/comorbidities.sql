@@ -1,6 +1,8 @@
-comor-- Table: public.comorbidities
+-- Table: public.comorbidities
 
 -- DROP TABLE IF EXISTS public.comorbidities;
+
+CREATE SEQUENCE IF NOT EXISTS public.comorbidities_comorbidity_id_seq;
 
 CREATE TABLE IF NOT EXISTS public.comorbidities
 (
@@ -12,6 +14,9 @@ CREATE TABLE IF NOT EXISTS public.comorbidities
 )
 
 TABLESPACE pg_default;
+
+ALTER SEQUENCE public.comorbidities_comorbidity_id_seq
+    OWNED BY public.comorbidities.comorbidity_id;
 
 ALTER TABLE IF EXISTS public.comorbidities
     OWNER to postgres;

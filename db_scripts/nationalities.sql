@@ -2,6 +2,8 @@
 
 -- DROP TABLE IF EXISTS public.nationalities;
 
+CREATE SEQUENCE IF NOT EXISTS public.nationalities_nationality_id_seq;
+
 CREATE TABLE IF NOT EXISTS public.nationalities
 (
     nationality_id integer NOT NULL DEFAULT nextval('nationalities_nationality_id_seq'::regclass),
@@ -18,6 +20,9 @@ CREATE TABLE IF NOT EXISTS public.nationalities
 )
 
 TABLESPACE pg_default;
+
+ALTER SEQUENCE public.nationalities_nationality_id_seq
+    OWNED BY public.nationalities.nationality_id;
 
 ALTER TABLE IF EXISTS public.nationalities
     OWNER to postgres;

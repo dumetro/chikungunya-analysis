@@ -26,10 +26,17 @@ make app                     # launch the dashboard
 make test                    # unit tests
 ```
 
-> Requires an existing PostgreSQL database containing `chikungunya_analysis`,
+> Requires a PostgreSQL database containing `chikungunya_analysis`,
 > the reference tables (`symptoms`, `nationalities`, `comorbidities`,
 > `occupations`, `healthfacilities`, `analysis_lookups`) and the `*_raw_map`
-> tables. DDL lives in [`db_scripts/`](db_scripts/).
+> tables. DDL and seeds live in [`db_scripts/`](db_scripts/);
+> [`setup_all.sql`](db_scripts/setup_all.sql) builds and seeds everything in
+> dependency order (idempotent, safe to re-run):
+>
+> ```bash
+> createdb -h localhost -U postgres chikungunya
+> psql -h localhost -U postgres -d chikungunya -f db_scripts/setup_all.sql
+> ```
 
 ## Pipeline stages
 

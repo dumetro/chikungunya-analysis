@@ -2,6 +2,8 @@
 
 -- DROP TABLE IF EXISTS public.analysis_lookups;
 
+CREATE SEQUENCE IF NOT EXISTS public.analysis_lookups_lookup_id_seq;
+
 CREATE TABLE IF NOT EXISTS public.analysis_lookups
 (
     lookup_id integer NOT NULL DEFAULT nextval('analysis_lookups_lookup_id_seq'::regclass),
@@ -15,6 +17,9 @@ CREATE TABLE IF NOT EXISTS public.analysis_lookups
 )
 
 TABLESPACE pg_default;
+
+ALTER SEQUENCE public.analysis_lookups_lookup_id_seq
+    OWNED BY public.analysis_lookups.lookup_id;
 
 ALTER TABLE IF EXISTS public.analysis_lookups
     OWNER to postgres;

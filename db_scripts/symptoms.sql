@@ -2,6 +2,8 @@
 
 -- DROP TABLE IF EXISTS public.symptoms;
 
+CREATE SEQUENCE IF NOT EXISTS public.symptoms_symptom_id_seq;
+
 CREATE TABLE IF NOT EXISTS public.symptoms
 (
     symptom_id integer NOT NULL DEFAULT nextval('symptoms_symptom_id_seq'::regclass),
@@ -11,6 +13,9 @@ CREATE TABLE IF NOT EXISTS public.symptoms
 )
 
 TABLESPACE pg_default;
+
+ALTER SEQUENCE public.symptoms_symptom_id_seq
+    OWNED BY public.symptoms.symptom_id;
 
 ALTER TABLE IF EXISTS public.symptoms
     OWNER to postgres;

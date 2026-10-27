@@ -2,6 +2,8 @@
 
 -- DROP TABLE IF EXISTS public.symptom_raw_map;
 
+CREATE SEQUENCE IF NOT EXISTS public.symptom_raw_map_id_seq;
+
 CREATE TABLE IF NOT EXISTS public.symptom_raw_map
 (
     id integer NOT NULL DEFAULT nextval('symptom_raw_map_id_seq'::regclass),
@@ -16,6 +18,9 @@ CREATE TABLE IF NOT EXISTS public.symptom_raw_map
 )
 
 TABLESPACE pg_default;
+
+ALTER SEQUENCE public.symptom_raw_map_id_seq
+    OWNED BY public.symptom_raw_map.id;
 
 ALTER TABLE IF EXISTS public.symptom_raw_map
     OWNER to postgres;
